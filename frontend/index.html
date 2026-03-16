@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ASL Translator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ── Header ─────────────────────────────────────────────────────────────── -->
+  <header>
+    <div class="logo">
+      <span class="logo-icon">✋</span>
+      <span class="logo-text">ASL<em>translate</em></span>
+    </div>
+    <div class="status-bar">
+      <span class="dot" id="modelDot"></span>
+      <span id="modelStatus">Connecting…</span>
+      <span class="sep">|</span>
+      <span id="signCount">0 signs loaded</span>
+    </div>
+  </header>
+
+  <!-- ── Main layout ─────────────────────────────────────────────────────────── -->
+  <main>
+
+    <!-- Left: camera panel -->
+    <section class="camera-panel">
+      <div class="camera-wrap" id="cameraWrap">
+        <video id="video" autoplay muted playsinline></video>
+        <canvas id="overlay"></canvas>
+
+        <div class="camera-hud">
+          <div class="hud-sign" id="hudSign">—</div>
+          <div class="hud-conf">
+            <div class="conf-bar-track">
+              <div class="conf-bar-fill" id="confBar"></div>
+            </div>
+            <span id="confPct">0%</span>
+          </div>
+        </div>
+
+        <div class="camera-notice" id="cameraNotice">
+          <div class="notice-icon">📷</div>
+          <div>Click <strong>Start Camera</strong> to begin</div>
+        </div>
+      </div>
+
+      <!-- Controls -->
+      <div class="controls">
+        <button class="btn btn-primary" id="btnStart">Start Camera</button>
+        <button class="btn btn-secondary" id="btnFlush" disabled>Flush Sentence</button>
+        <button class="btn btn-ghost" id="btnClear">Clear All</button>
+      </div>
+
+      <!-- Settings row -->
+      <div class="settings-row">
+        <label class="setting">
+          <span>Confidence threshold</span>
+          <input type="range" id="confThresh" min="50" max="95" value="72" step="1" />
+          <span id="confThreshVal">72%</span>
+        </label>
+        <label class="setting">
+          <span>Pause to flush (s)</span>
+          <input type="range" id="pauseThresh" min="8" max="30" value="15" step="1" />
+          <span id="pauseThreshVal">1.5s</span>
+        </label>
+      </div>
+    </section>
+
+    <!-- Right: output panel -->
+    <section class="output-panel">
+
+      <!-- Live sign buffer -->
+      <div class="panel-block">
+        <div class="panel-label">Current signs</div>
+        <div class="sign-buffer" id="signBuffer">
+          <span class="buffer-empty">Start signing to see detected signs here…</span>
+        </div>
+      </div>
+
+      <!-- Translated sentences -->
+      <div class="panel-block flex-grow">
+        <div class="panel-label-row">
+          <div class="panel-label">Translations</div>
+          <button class="btn-icon" id="btnSpeak" title="Speak last sentence" disabled>🔊</button>
+        </div>
+        <div class="sentence-list" id="sentenceList">
+          <div class="sentence-placeholder">Completed sentences will appear here…</div>
+        </div>
+      </div>
+
+      <!-- Gloss log -->
+      <div class="panel-block">
+        <div class="panel-label">Gloss log</div>
+        <div class="gloss-log" id="glossLog"></div>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- ── Toast ───────────────────────────────────────────────────────────────── -->
+  <div class="toast" id="toast"></div>
+
+  <!-- ── MediaPipe Tasks Vision ─────────────────────────────────────────────── -->
+  <script type="module" src="app.js"></script>
+</body>
+</html>

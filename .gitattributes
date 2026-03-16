@@ -1,0 +1,17 @@
+# Auto-detect text files and normalize line endings
+* text=auto
+
+# These must always use LF (Linux/server files)
+*.py text eol=lf
+*.sh text eol=lf
+Dockerfile text eol=lf
+
+# Web files — LF
+*.html text eol=lf
+*.css text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+
+# Windows is fine with either
+*.md text
+requirements.txt text

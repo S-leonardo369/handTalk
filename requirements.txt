@@ -1,0 +1,11 @@
+tensorflow==2.20.0
+mediapipe==0.10.32
+opencv-python==4.11.0.86
+fastapi==0.115.0
+uvicorn[standard]==0.34.0
+pydantic==2.11.0
+scikit-learn==1.6.1
+matplotlib==3.10.0
+python-multipart==0.0.20
+websockets==15.0
+numpy==2.2.6

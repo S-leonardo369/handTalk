@@ -1,0 +1,22 @@
+# Virtual environment
+asl_env/
+
+# Trained model (large files)
+backend/model/*.h5
+backend/model/*.tflite
+
+# Collected data (can be large, personal)
+data/raw/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Training plots
+backend/model/training_plot.png

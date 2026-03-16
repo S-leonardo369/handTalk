@@ -1,0 +1,468 @@
+/* ── Reset & base ─────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg0:       #0a0a0f;
+  --bg1:       #111118;
+  --bg2:       #18181f;
+  --bg3:       #22222c;
+  --border:    #2e2e3a;
+  --border-hi: #44445a;
+  --accent:    #00e5a0;
+  --accent2:   #00b4ff;
+  --warn:      #ffb800;
+  --danger:    #ff4d6d;
+  --text0:     #f0f0f8;
+  --text1:     #a0a0b8;
+  --text2:     #606075;
+  --mono:      'Space Mono', monospace;
+  --sans:      'Syne', sans-serif;
+  --radius:    10px;
+  --radius-lg: 18px;
+  --shadow:    0 4px 32px rgba(0,0,0,.55);
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg0);
+  color: var(--text0);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+/* ── Grain texture overlay ────────────────────────────────────────────────── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 9999;
+  opacity: .45;
+}
+
+/* ── Header ───────────────────────────────────────────────────────────────── */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 28px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg1);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--sans);
+  font-weight: 800;
+  font-size: 1.25rem;
+  letter-spacing: -0.02em;
+}
+.logo-icon { font-size: 1.4rem; }
+.logo-text em {
+  font-style: normal;
+  color: var(--accent);
+}
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--text1);
+}
+.sep { color: var(--border-hi); }
+
+.dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--border-hi);
+  flex-shrink: 0;
+  transition: background .3s;
+}
+.dot.ok    { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+.dot.warn  { background: var(--warn);   box-shadow: 0 0 8px var(--warn);   }
+.dot.error { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+
+/* ── Main grid ───────────────────────────────────────────────────────────── */
+main {
+  display: grid;
+  grid-template-columns: 1fr 420px;
+  gap: 20px;
+  padding: 20px 24px;
+  height: calc(100vh - 57px);
+  max-height: calc(100vh - 57px);
+  overflow: hidden;
+}
+
+/* ── Camera panel ─────────────────────────────────────────────────────────── */
+.camera-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow: hidden;
+}
+
+.camera-wrap {
+  position: relative;
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+}
+
+#video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transform: scaleX(-1);   /* mirror — natural for user */
+  filter: brightness(0.96) contrast(1.04);
+}
+
+#overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transform: scaleX(-1);
+}
+
+/* HUD — sign name + confidence */
+.camera-hud {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 14px 18px 16px;
+  background: linear-gradient(to top, rgba(10,10,15,.92) 0%, transparent 100%);
+}
+
+.hud-sign {
+  font-family: var(--sans);
+  font-weight: 800;
+  font-size: 2.8rem;
+  letter-spacing: -0.02em;
+  color: var(--accent);
+  line-height: 1;
+  text-shadow: 0 0 30px rgba(0,229,160,.4);
+  transition: all .15s;
+  min-height: 3.2rem;
+}
+
+.hud-conf {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+.conf-bar-track {
+  flex: 1;
+  height: 4px;
+  background: rgba(255,255,255,.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.conf-bar-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width .2s, background .2s;
+}
+.conf-bar-fill.mid  { background: var(--warn);   }
+.conf-bar-fill.low  { background: var(--danger);  }
+
+#confPct {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--text1);
+  min-width: 34px;
+  text-align: right;
+}
+
+/* Camera placeholder */
+.camera-notice {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: var(--bg1);
+  color: var(--text1);
+  font-size: 0.9rem;
+  transition: opacity .3s;
+}
+.camera-notice.hidden { opacity: 0; pointer-events: none; }
+.notice-icon { font-size: 2.8rem; }
+
+/* ── Controls ─────────────────────────────────────────────────────────────── */
+.controls {
+  display: flex;
+  gap: 10px;
+}
+
+.btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: var(--radius);
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: all .15s;
+  letter-spacing: 0.01em;
+}
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+
+.btn-primary {
+  background: var(--accent);
+  color: #000;
+  flex: 1;
+}
+.btn-primary:hover:not(:disabled) {
+  background: #1ffab5;
+  box-shadow: 0 0 18px rgba(0,229,160,.35);
+}
+
+.btn-secondary {
+  background: var(--bg3);
+  color: var(--text0);
+  border: 1px solid var(--border-hi);
+}
+.btn-secondary:hover:not(:disabled) {
+  background: var(--bg2);
+  border-color: var(--accent2);
+  color: var(--accent2);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text2);
+  border: 1px solid var(--border);
+}
+.btn-ghost:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+/* ── Settings row ─────────────────────────────────────────────────────────── */
+.settings-row {
+  display: flex;
+  gap: 20px;
+}
+.setting {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  font-size: 0.78rem;
+  color: var(--text1);
+  white-space: nowrap;
+  cursor: default;
+}
+.setting input[type=range] {
+  flex: 1;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.setting span:last-child {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--accent);
+  min-width: 36px;
+  text-align: right;
+}
+
+/* ── Output panel ─────────────────────────────────────────────────────────── */
+.output-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow: hidden;
+}
+
+.panel-block {
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.panel-block.flex-grow { flex: 1; min-height: 0; }
+
+.panel-label {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text2);
+}
+
+.panel-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.btn-icon {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text1);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all .15s;
+}
+.btn-icon:hover:not(:disabled) {
+  border-color: var(--accent2);
+  color: var(--accent2);
+}
+.btn-icon:disabled { opacity: .3; cursor: not-allowed; }
+
+/* Sign buffer chips */
+.sign-buffer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-height: 36px;
+  align-items: flex-start;
+}
+.buffer-empty {
+  color: var(--text2);
+  font-size: 0.82rem;
+  font-style: italic;
+}
+
+.sign-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  background: var(--bg3);
+  border: 1px solid var(--border-hi);
+  border-radius: 20px;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--text0);
+  animation: chipIn .18s ease;
+}
+.sign-chip.latest {
+  background: rgba(0,229,160,.12);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+@keyframes chipIn {
+  from { opacity: 0; transform: scale(.8) translateY(4px); }
+  to   { opacity: 1; transform: scale(1)  translateY(0);   }
+}
+
+/* Sentence list */
+.sentence-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 4px;
+}
+.sentence-list::-webkit-scrollbar { width: 4px; }
+.sentence-list::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 2px; }
+
+.sentence-placeholder {
+  color: var(--text2);
+  font-size: 0.82rem;
+  font-style: italic;
+  margin: auto;
+  text-align: center;
+  padding: 20px 0;
+}
+
+.sentence-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  padding: 12px 14px;
+  animation: slideIn .25s ease;
+}
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.sentence-text {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text0);
+  line-height: 1.4;
+}
+.sentence-meta {
+  margin-top: 5px;
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  color: var(--text2);
+}
+
+/* Gloss log */
+.gloss-log {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--text2);
+  max-height: 60px;
+  overflow-y: auto;
+  line-height: 1.8;
+}
+.gloss-log span {
+  color: var(--accent2);
+  margin-right: 4px;
+}
+
+/* ── Toast ────────────────────────────────────────────────────────────────── */
+.toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--bg3);
+  border: 1px solid var(--border-hi);
+  color: var(--text0);
+  padding: 10px 22px;
+  border-radius: 30px;
+  font-size: 0.83rem;
+  opacity: 0;
+  transition: all .25s;
+  pointer-events: none;
+  z-index: 200;
+  white-space: nowrap;
+}
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ── Responsive ───────────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  main {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+    height: auto;
+    max-height: none;
+    overflow: auto;
+  }
+  .camera-wrap { aspect-ratio: 4/3; flex: none; }
+  .camera-panel { overflow: visible; }
+  .output-panel { height: 70vh; }
+}
