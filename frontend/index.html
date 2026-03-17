@@ -2,111 +2,229 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ASL Translator</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#0d0d10" />
+  <title>ASL Translate</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
-  <!-- ── Header ─────────────────────────────────────────────────────────────── -->
-  <header>
-    <div class="logo">
-      <span class="logo-icon">✋</span>
-      <span class="logo-text">ASL<em>translate</em></span>
-    </div>
-    <div class="status-bar">
-      <span class="dot" id="modelDot"></span>
-      <span id="modelStatus">Connecting…</span>
-      <span class="sep">|</span>
-      <span id="signCount">0 signs loaded</span>
-    </div>
-  </header>
+  <!-- ═══════════════════════════════════════════════
+       DESKTOP LAYOUT  (visible ≥ 1024px)
+  ════════════════════════════════════════════════ -->
+  <div class="desktop-layout">
 
-  <!-- ── Main layout ─────────────────────────────────────────────────────────── -->
-  <main>
+    <div class="d-camera-col">
+      <div class="d-camera-wrap">
+        <video id="d-video" autoplay muted playsinline></video>
+        <canvas id="d-overlay"></canvas>
 
-    <!-- Left: camera panel -->
-    <section class="camera-panel">
-      <div class="camera-wrap" id="cameraWrap">
-        <video id="video" autoplay muted playsinline></video>
-        <canvas id="overlay"></canvas>
+        <!-- Hand tracking pulse ring — appears when hand detected -->
+        <div class="d-hand-ring" id="dHandRing"></div>
 
-        <div class="camera-hud">
-          <div class="hud-sign" id="hudSign">—</div>
-          <div class="hud-conf">
-            <div class="conf-bar-track">
-              <div class="conf-bar-fill" id="confBar"></div>
-            </div>
-            <span id="confPct">0%</span>
+        <div class="d-sign-hud">
+          <div class="d-sign-word" id="dSignWord">—</div>
+          <div class="d-conf-row">
+            <div class="d-conf-track"><div class="d-conf-bar" id="dConfBar"></div></div>
+            <span class="d-conf-pct" id="dConfPct">0%</span>
           </div>
         </div>
 
-        <div class="camera-notice" id="cameraNotice">
-          <div class="notice-icon">📷</div>
-          <div>Click <strong>Start Camera</strong> to begin</div>
+        <div class="d-cam-placeholder" id="dPlaceholder">
+          <div class="d-placeholder-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          </div>
+          <span class="d-placeholder-title">Ready to translate</span>
+          <span class="d-placeholder-sub">Position your hand in frame and start signing</span>
         </div>
       </div>
 
-      <!-- Controls -->
-      <div class="controls">
-        <button class="btn btn-primary" id="btnStart">Start Camera</button>
-        <button class="btn btn-secondary" id="btnFlush" disabled>Flush Sentence</button>
-        <button class="btn btn-ghost" id="btnClear">Clear All</button>
+      <div class="d-controls">
+        <button class="d-btn-start" id="dBtnStart">
+          <span class="btn-label">Start Camera</span>
+        </button>
+        <button class="d-btn-flush" id="dBtnFlush" disabled>Flush sentence</button>
+        <button class="d-btn-speak" id="dBtnSpeak" disabled>🔊 Speak</button>
+        <button class="d-btn-clear" id="dBtnClear">Clear</button>
       </div>
 
-      <!-- Settings row -->
-      <div class="settings-row">
-        <label class="setting">
-          <span>Confidence threshold</span>
-          <input type="range" id="confThresh" min="50" max="95" value="72" step="1" />
-          <span id="confThreshVal">72%</span>
+      <div class="d-sliders">
+        <label class="d-slider-row">
+          <span class="d-slider-label">Confidence</span>
+          <input type="range" id="dConfThresh" min="50" max="95" value="72" />
+          <span class="d-slider-val" id="dConfThreshVal">72%</span>
         </label>
-        <label class="setting">
-          <span>Pause to flush (s)</span>
-          <input type="range" id="pauseThresh" min="8" max="30" value="15" step="1" />
-          <span id="pauseThreshVal">1.5s</span>
+        <label class="d-slider-row">
+          <span class="d-slider-label">Pause flush</span>
+          <input type="range" id="dPauseThresh" min="8" max="40" value="15" />
+          <span class="d-slider-val" id="dPauseThreshVal">1.5s</span>
         </label>
       </div>
-    </section>
+    </div>
 
-    <!-- Right: output panel -->
-    <section class="output-panel">
+    <div class="d-output-col">
 
-      <!-- Live sign buffer -->
-      <div class="panel-block">
-        <div class="panel-label">Current signs</div>
-        <div class="sign-buffer" id="signBuffer">
-          <span class="buffer-empty">Start signing to see detected signs here…</span>
+      <div class="d-header">
+        <div class="d-logo">✋ &nbsp;<strong>ASL</strong><span>translate</span></div>
+        <div class="d-status">
+          <span class="d-dot" id="dDot"></span>
+          <span id="dStatusText">Connecting…</span>
+          <span class="d-divider">·</span>
+          <span id="dSignCount">0 signs</span>
         </div>
       </div>
 
-      <!-- Translated sentences -->
-      <div class="panel-block flex-grow">
-        <div class="panel-label-row">
-          <div class="panel-label">Translations</div>
-          <button class="btn-icon" id="btnSpeak" title="Speak last sentence" disabled>🔊</button>
-        </div>
-        <div class="sentence-list" id="sentenceList">
-          <div class="sentence-placeholder">Completed sentences will appear here…</div>
+      <div class="d-section">
+        <div class="d-section-label">Live buffer</div>
+        <div class="d-chip-row" id="dChipRow">
+          <span class="d-empty">Start signing — detected signs appear here</span>
         </div>
       </div>
 
-      <!-- Gloss log -->
-      <div class="panel-block">
-        <div class="panel-label">Gloss log</div>
-        <div class="gloss-log" id="glossLog"></div>
+      <div class="d-section d-section-grow">
+        <div class="d-section-label">Translations</div>
+        <div class="d-sentence-list" id="dSentenceList">
+          <!-- empty state with personality -->
+          <div class="d-empty-state" id="dEmptyState">
+            <div class="d-empty-icon">✋</div>
+            <div class="d-empty-title">Nothing yet</div>
+            <div class="d-empty-hint">Complete a sentence and it will appear here</div>
+          </div>
+        </div>
       </div>
 
-    </section>
-  </main>
+      <div class="d-footer" id="dModelInfo">Checking backend…</div>
+    </div>
+  </div>
 
-  <!-- ── Toast ───────────────────────────────────────────────────────────────── -->
+
+  <!-- ═══════════════════════════════════════════════
+       MOBILE LAYOUT  (visible < 1024px)
+  ════════════════════════════════════════════════ -->
+  <div class="mobile-layout">
+
+    <header class="m-header">
+      <div class="m-logo">✋ &nbsp;<strong>ASL</strong><span>translate</span></div>
+      <div class="m-status">
+        <span class="m-dot" id="mDot"></span>
+        <span id="mStatusText">Connecting…</span>
+      </div>
+    </header>
+
+    <div class="m-camera-wrap">
+      <video id="m-video" autoplay muted playsinline></video>
+      <canvas id="m-overlay"></canvas>
+
+      <!-- Hand tracking pulse ring -->
+      <div class="m-hand-ring" id="mHandRing"></div>
+
+      <div class="m-sign-hud">
+        <div class="m-sign-word" id="mSignWord">—</div>
+        <div class="m-conf-row">
+          <div class="m-conf-track"><div class="m-conf-bar" id="mConfBar"></div></div>
+          <span class="m-conf-pct" id="mConfPct">0%</span>
+        </div>
+      </div>
+
+      <div class="m-placeholder" id="mPlaceholder">
+        <div class="m-placeholder-icon">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        </div>
+        <span class="m-placeholder-title">Ready to translate</span>
+        <span class="m-placeholder-sub">Tap Start Camera to begin</span>
+      </div>
+    </div>
+
+    <div class="m-actions">
+      <button class="m-btn-start" id="mBtnStart">
+        <span class="btn-label">Start Camera</span>
+      </button>
+      <button class="m-btn-flush" id="mBtnFlush" disabled>Flush ↺</button>
+      <button class="m-btn-speak" id="mBtnSpeak" disabled>🔊</button>
+    </div>
+
+    <nav class="m-tabs">
+      <button class="m-tab active" data-tab="signs">
+        <span class="m-tab-icon">👁</span>Signs
+      </button>
+      <button class="m-tab" data-tab="sentences">
+        <span class="m-tab-icon">💬</span>Sentences
+        <span class="m-badge" id="mBadge"></span>
+      </button>
+      <button class="m-tab" data-tab="settings">
+        <span class="m-tab-icon">⚙️</span>Settings
+      </button>
+    </nav>
+
+    <div class="m-panels">
+
+      <div class="m-panel active" id="m-panel-signs">
+        <p class="m-panel-label">Current buffer</p>
+        <div class="m-chip-row" id="mChipRow">
+          <span class="m-empty">Start signing…</span>
+        </div>
+      </div>
+
+      <div class="m-panel" id="m-panel-sentences">
+        <div class="m-panel-top">
+          <p class="m-panel-label">Translations</p>
+          <button class="m-btn-clear" id="mBtnClear">Clear</button>
+        </div>
+        <div class="m-sentence-list" id="mSentenceList">
+          <div class="m-empty-state" id="mEmptyState">
+            <div class="m-empty-icon">✋</div>
+            <div class="m-empty-title">Nothing yet</div>
+            <div class="m-empty-hint">Complete a sentence and it will appear here</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="m-panel" id="m-panel-settings">
+        <p class="m-panel-label">Settings</p>
+
+        <div class="m-setting">
+          <div class="m-setting-name">Confidence threshold</div>
+          <div class="m-setting-desc">Raise to reduce false detections.</div>
+          <div class="m-setting-row">
+            <input type="range" id="mConfThresh" min="50" max="95" value="72" />
+            <span id="mConfThreshVal">72%</span>
+          </div>
+        </div>
+
+        <div class="m-setting">
+          <div class="m-setting-name">Pause to flush</div>
+          <div class="m-setting-desc">Silence gap before sentence ends.</div>
+          <div class="m-setting-row">
+            <input type="range" id="mPauseThresh" min="8" max="40" value="15" />
+            <span id="mPauseThreshVal">1.5s</span>
+          </div>
+        </div>
+
+        <div class="m-setting">
+          <div class="m-setting-name">Backend URL</div>
+          <input class="m-url-input" id="mBackendUrl" type="text" value="http://localhost:8000" />
+        </div>
+
+        <div class="m-setting">
+          <div class="m-setting-name">Model info</div>
+          <div class="m-model-info" id="mModelInfo">Checking…</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Celebration burst canvas (shared) -->
+  <canvas id="celebrationCanvas" style="position:fixed;inset:0;pointer-events:none;z-index:9998;"></canvas>
+
   <div class="toast" id="toast"></div>
 
-  <!-- ── MediaPipe Tasks Vision ─────────────────────────────────────────────── -->
   <script type="module" src="app.js"></script>
 </body>
 </html>
