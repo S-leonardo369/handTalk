@@ -6,242 +6,109 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="theme-color" content="#0d0d10" />
+  <meta name="theme-color" content="#000000" />
   <title>ASL Translate</title>
-
-  <!--
-    PERFORMANCE: Single combined Google Fonts request (was 2 separate requests).
-    display=swap: text shows immediately in fallback font, no invisible text flash.
-    preconnect: DNS + TLS handshake starts before browser parses the link tag.
-  -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
-
-  <!--
-    PERFORMANCE: Preload MediaPipe WASM files so they start downloading
-    before the user clicks Start — eliminates the cold-load delay.
-    The vision_bundle JS is also prefetched as a module.
-  -->
-  <link rel="prefetch" href="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.js" as="script" crossorigin />
-  <link rel="prefetch" href="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm/vision_wasm_internal.wasm" as="fetch" crossorigin />
-
-  <!-- PERFORMANCE: Preload the hand landmarker model task file -->
-  <link rel="prefetch" href="https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task" as="fetch" crossorigin />
-
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
 
-  <!-- ══════════════════════════════════════════════
-       DESKTOP  ≥ 1024px
-  ═════════════════════════════════════════════════ -->
-  <div class="desktop-layout">
+  <video id="video" autoplay muted playsinline></video>
+  <canvas id="overlay"></canvas>
 
-    <div class="d-camera-col">
-      <div class="d-camera-wrap">
-        <video id="d-video" autoplay muted playsinline></video>
-        <canvas id="d-overlay"></canvas>
-        <div class="d-hand-ring" id="dHandRing"></div>
-
-        <div class="d-sign-hud">
-          <div class="d-sign-word" id="dSignWord">—</div>
-          <div class="d-conf-row">
-            <div class="d-conf-track"><div class="d-conf-bar" id="dConfBar"></div></div>
-            <span class="d-conf-pct" id="dConfPct">0%</span>
-          </div>
-        </div>
-
-        <div class="d-cam-placeholder" id="dPlaceholder">
-          <div class="d-placeholder-icon">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-          </div>
-          <span class="d-placeholder-title">Ready to translate</span>
-          <span class="d-placeholder-sub">Position your hand in frame and start signing</span>
-        </div>
-      </div>
-
-      <div class="d-controls">
-        <button class="d-btn-start" id="dBtnStart">
-          <span class="btn-label">Start Camera</span>
-        </button>
-        <button class="d-btn-flush" id="dBtnFlush" disabled>Flush sentence</button>
-        <button class="d-btn-speak" id="dBtnSpeak" disabled>🔊 Speak</button>
-        <button class="d-btn-clear" id="dBtnClear">Clear</button>
-      </div>
-
-      <div class="d-sliders">
-        <label class="d-slider-row">
-          <span class="d-slider-label">Confidence</span>
-          <input type="range" id="dConfThresh" min="50" max="95" value="72" />
-          <span class="d-slider-val" id="dConfThreshVal">72%</span>
-        </label>
-        <label class="d-slider-row">
-          <span class="d-slider-label">Pause flush</span>
-          <input type="range" id="dPauseThresh" min="8" max="40" value="15" />
-          <span class="d-slider-val" id="dPauseThreshVal">1.5s</span>
-        </label>
-      </div>
-    </div>
-
-    <div class="d-output-col">
-      <div class="d-header">
-        <div class="d-logo">✋ &nbsp;<strong>ASL</strong><span>translate</span></div>
-        <div class="d-status">
-          <span class="d-dot" id="dDot"></span>
-          <span id="dStatusText">Connecting…</span>
-          <span class="d-divider">·</span>
-          <span id="dSignCount">0 signs</span>
-        </div>
-      </div>
-
-      <div class="d-section">
-        <div class="d-section-label">Live buffer</div>
-        <div class="d-chip-row" id="dChipRow">
-          <span class="d-empty">Start signing — detected signs appear here</span>
-        </div>
-      </div>
-
-      <div class="d-section d-section-grow">
-        <div class="d-section-label">Translations</div>
-        <div class="d-sentence-list" id="dSentenceList">
-          <div class="d-empty-state" id="dEmptyState">
-            <div class="d-empty-icon">✋</div>
-            <div class="d-empty-title">Nothing yet</div>
-            <div class="d-empty-hint">Complete a sentence and it will appear here</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="d-footer" id="dModelInfo">Checking backend…</div>
-    </div>
-  </div>
-
-
-  <!-- ══════════════════════════════════════════════
-       MOBILE  < 1024px
-  ═════════════════════════════════════════════════ -->
-  <div class="mobile-layout">
-
-    <header class="m-header">
-      <div class="m-logo">✋ &nbsp;<strong>ASL</strong><span>translate</span></div>
-      <div class="m-status">
-        <span class="m-dot" id="mDot"></span>
-        <span id="mStatusText">Connecting…</span>
-      </div>
-    </header>
-
-    <div class="m-camera-wrap">
-      <video id="m-video" autoplay muted playsinline></video>
-      <canvas id="m-overlay"></canvas>
-      <div class="m-hand-ring" id="mHandRing"></div>
-
-      <div class="m-sign-hud">
-        <div class="m-sign-word" id="mSignWord">—</div>
-        <div class="m-conf-row">
-          <div class="m-conf-track"><div class="m-conf-bar" id="mConfBar"></div></div>
-          <span class="m-conf-pct" id="mConfPct">0%</span>
-        </div>
-      </div>
-
-      <div class="m-placeholder" id="mPlaceholder">
-        <div class="m-placeholder-icon">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-        </div>
-        <span class="m-placeholder-title">Ready to translate</span>
-        <span class="m-placeholder-sub">Tap Start Camera to begin</span>
-      </div>
-    </div>
-
-    <div class="m-actions">
-      <button class="m-btn-start" id="mBtnStart">
+  <div class="start-screen" id="startScreen">
+    <div class="start-inner">
+      <div class="start-logo">✋ <strong>ASL</strong>translate</div>
+      <p class="start-hint">Position your hand in frame and start signing</p>
+      <button class="start-btn" id="btnStart">
         <span class="btn-label">Start Camera</span>
       </button>
-      <button class="m-btn-flush" id="mBtnFlush" disabled>Flush ↺</button>
-      <button class="m-btn-speak" id="mBtnSpeak" disabled>🔊</button>
-    </div>
-
-    <nav class="m-tabs">
-      <button class="m-tab active" data-tab="signs">
-        <span class="m-tab-icon">👁</span>Signs
-      </button>
-      <button class="m-tab" data-tab="sentences">
-        <span class="m-tab-icon">💬</span>Sentences
-        <span class="m-badge" id="mBadge"></span>
-      </button>
-      <button class="m-tab" data-tab="settings">
-        <span class="m-tab-icon">⚙️</span>Settings
-      </button>
-    </nav>
-
-    <div class="m-panels">
-
-      <div class="m-panel active" id="m-panel-signs">
-        <p class="m-panel-label">Current buffer</p>
-        <div class="m-chip-row" id="mChipRow">
-          <span class="m-empty">Start signing…</span>
-        </div>
+      <div class="start-status">
+        <span class="sdot" id="statusDot"></span>
+        <span id="statusText">Checking backend…</span>
       </div>
-
-      <div class="m-panel" id="m-panel-sentences">
-        <div class="m-panel-top">
-          <p class="m-panel-label">Translations</p>
-          <button class="m-btn-clear" id="mBtnClear">Clear</button>
-        </div>
-        <div class="m-sentence-list" id="mSentenceList">
-          <div class="m-empty-state" id="mEmptyState">
-            <div class="m-empty-icon">✋</div>
-            <div class="m-empty-title">Nothing yet</div>
-            <div class="m-empty-hint">Complete a sentence and it will appear here</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="m-panel" id="m-panel-settings">
-        <p class="m-panel-label">Settings</p>
-
-        <div class="m-setting">
-          <div class="m-setting-name">Confidence threshold</div>
-          <div class="m-setting-desc">Raise to reduce false detections.</div>
-          <div class="m-setting-row">
-            <input type="range" id="mConfThresh" min="50" max="95" value="72" />
-            <span id="mConfThreshVal">72%</span>
-          </div>
-        </div>
-
-        <div class="m-setting">
-          <div class="m-setting-name">Pause to flush</div>
-          <div class="m-setting-desc">Silence gap before sentence ends.</div>
-          <div class="m-setting-row">
-            <input type="range" id="mPauseThresh" min="8" max="40" value="15" />
-            <span id="mPauseThreshVal">1.5s</span>
-          </div>
-        </div>
-
-        <div class="m-setting">
-          <div class="m-setting-name">Backend URL</div>
-          <input class="m-url-input" id="mBackendUrl" type="text" value="http://localhost:8000" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" />
-        </div>
-
-        <div class="m-setting">
-          <div class="m-setting-name">Model info</div>
-          <div class="m-model-info" id="mModelInfo">Checking…</div>
-        </div>
-      </div>
-
     </div>
   </div>
 
-  <!-- Shared celebration canvas — lazy init in JS -->
-  <canvas id="celebrationCanvas" style="position:fixed;inset:0;pointer-events:none;z-index:9998;display:none;"></canvas>
+  <div class="top-bar" id="topBar">
+    <div class="top-logo">✋ <strong>ASL</strong><span>translate</span></div>
+    <div class="top-right">
+      <span class="sdot" id="topDot"></span>
+      <span id="topStatus">—</span>
+      <button class="icon-btn" id="btnSettings" title="Settings">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </div>
+  </div>
 
+  <div class="hand-ring" id="handRing"></div>
+
+  <div class="sign-display" id="signDisplay">
+    <div class="sign-word" id="signWord">—</div>
+  </div>
+
+  <div class="sentence-bar" id="sentenceBar">
+    <div class="sentence-text" id="sentenceText">Completed sentences appear here</div>
+    <div class="sentence-chips" id="sentenceChips"></div>
+  </div>
+
+  <div class="controls" id="controls">
+    <button class="ctrl-btn" id="btnFlush" disabled>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.5"/></svg>
+      Flush
+    </button>
+    <button class="ctrl-btn" id="btnSpeak" disabled>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+      Speak
+    </button>
+    <button class="ctrl-btn ctrl-btn--clear" id="btnClear">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+      Clear
+    </button>
+  </div>
+
+  <div class="settings-panel" id="settingsPanel">
+    <div class="settings-inner">
+      <div class="settings-title">Settings</div>
+      <div class="setting-row">
+        <span class="setting-label">Confidence</span>
+        <input type="range" id="confThresh" min="50" max="95" value="72" />
+        <span class="setting-val" id="confThreshVal">72%</span>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Pause flush</span>
+        <input type="range" id="pauseThresh" min="8" max="40" value="15" />
+        <span class="setting-val" id="pauseThreshVal">1.5s</span>
+      </div>
+      <div class="setting-row setting-row--url">
+        <span class="setting-label">Backend</span>
+        <input class="url-input" id="backendUrl" type="text" value="http://localhost:8000"
+          autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" />
+      </div>
+      <div class="model-info" id="modelInfo">Checking…</div>
+      <button class="settings-close" id="btnSettingsClose">Done</button>
+    </div>
+  </div>
+
+  <div class="history-panel" id="historyPanel">
+    <div class="history-inner">
+      <div class="history-title">
+        <span>Translation history</span>
+        <button class="icon-btn" id="btnHistoryClose">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="history-list" id="historyList">
+        <div class="history-empty">No translations yet</div>
+      </div>
+    </div>
+  </div>
+
+  <canvas id="celebrationCanvas" style="position:fixed;inset:0;pointer-events:none;z-index:200;display:none;"></canvas>
   <div class="toast" id="toast"></div>
 
-  <!--
-    PERFORMANCE: defer — script downloads in parallel with HTML parse,
-    executes after parse completes. Non-blocking.
-    type=module already implies defer, but explicit is clearer.
-  -->
   <script type="module" src="app.js"></script>
 </body>
 </html>
