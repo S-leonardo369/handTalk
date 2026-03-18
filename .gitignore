@@ -18,5 +18,10 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
+# wasm
+frontend/hand_landmarker.task
+frontend/vision_bundle.js
+frontend/wasm/
+
 # Training plots
 backend/model/training_plot.png
