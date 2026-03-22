@@ -28,3 +28,4 @@ backend/model/training_plot.pngdata/
 backend/model/*.h5
 backend/model/*.json
 backend/model/*.png
+data/
