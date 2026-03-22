@@ -24,16 +24,16 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-DATA_DIR    = Path("../data/raw")
+DATA_DIR = Path("../data/raw/words")
 MODEL_DIR   = Path("../backend/model")
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
 FRAMES      = 30        # sequence length
 FEATURES    = 63        # 21 landmarks × 3 coords
-BATCH_SIZE  = 32
+BATCH_SIZE  = 64
 MAX_EPOCHS  = 120
 VAL_SPLIT   = 0.20
-MIN_SAMPLES = 10        # skip signs with fewer samples than this
+MIN_SAMPLES = 50        # skip signs with fewer samples than this
 
 # ── Data loading ───────────────────────────────────────────────────────────────
 def load_dataset():
@@ -207,14 +207,14 @@ def train():
     print(classification_report(y_true, y_pred, target_names=le.classes_))
 
     # Save model + label map
-    model_path = MODEL_DIR / "asl_model.h5"
+    model_path = MODEL_DIR / "word_model.h5"
     model.save(str(model_path))
     label_map = {str(i): cls for i, cls in enumerate(le.classes_)}
-    with open(MODEL_DIR / "label_map.json", "w") as f:
+    with open(MODEL_DIR / "word_label_map.json", "w") as f:
         json.dump(label_map, f, indent=2)
 
     print(f"\n[SAVED] Model  → {model_path}")
-    print(f"[SAVED] Labels → {MODEL_DIR}/label_map.json")
+    print(f"[SAVED] Labels → {MODEL_DIR}/word_label_map.json")
 
     # Save training plot
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))

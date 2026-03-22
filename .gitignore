@@ -24,4 +24,7 @@ frontend/vision_bundle.js
 frontend/wasm/
 
 # Training plots
-backend/model/training_plot.png
+backend/model/training_plot.pngdata/
+backend/model/*.h5
+backend/model/*.json
+backend/model/*.png
