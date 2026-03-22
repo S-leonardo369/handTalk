@@ -20,8 +20,8 @@ LABELS = {}
 
 def load_model():
     global MODEL, LABELS
-    model_path = "model/asl_model.h5"
-    label_path = "model/label_map.json"
+    model_path = "model/word_model.h5"
+    label_path = "model/word_label_map.json"
     if os.path.exists(model_path) and os.path.exists(label_path):
         import tensorflow as tf
         MODEL = tf.keras.models.load_model(model_path)

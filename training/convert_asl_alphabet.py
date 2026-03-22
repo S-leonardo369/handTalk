@@ -22,7 +22,7 @@ OUTPUT_DIR   = Path("../data/raw/letters")
 FRAME_SIZE   = 30
 NUM_FEATURES = 63
 VALID_LABELS = set('ABCDEFGHIJKLMNOPQRSTUVWXYZ')
-MODEL_PATH   = str(Path("../frontend/hand_landmarker.task").resolve())
+MODEL_PATH   = str(Path("../frontend/hand_landmarker.task"))
 
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
