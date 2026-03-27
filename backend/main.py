@@ -1,9 +1,9 @@
-import os, json, time
+import os, json, time, gc
 import numpy as np
+import pandas as pd
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from collections import deque
+from pathlib import Path
 
 app = FastAPI(title="ASL Translator API")
 
@@ -14,175 +14,252 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── Constants ─────────────────────────────────────────────────────────────────
+ROWS_PER_FRAME = 543  # total landmarks per frame (face+left_hand+pose+right_hand)
+
 # ── Model loading ─────────────────────────────────────────────────────────────
-MODEL = None
-LABELS = {}
+INTERPRETER = None
+PREDICTION_FN = None
+ORD2SIGN = {}
+FORMAT_DF = None  # vocab_format.parquet — defines landmark order
 
 def load_model():
-    global MODEL, LABELS
-    model_path = "model/word_model.h5"
-    label_path = "model/word_label_map.json"
-    if os.path.exists(model_path) and os.path.exists(label_path):
-        import tensorflow as tf
-        MODEL = tf.keras.models.load_model(model_path)
-        with open(label_path) as f:
-            LABELS = json.load(f)
-        print(f"[OK] Model loaded — {len(LABELS)} signs")
+    global INTERPRETER, PREDICTION_FN, ORD2SIGN, FORMAT_DF
+
+    model_path  = "model/vocab_model_hoyso48.tflite"
+    map_path    = "model/vocab_map.json"
+    format_path = "model/vocab_format.parquet"
+
+    if not os.path.exists(model_path):
+        print("[WARN] No model found at", model_path)
+        return
+
+    try:
+        from tensorflow.lite.python.interpreter import Interpreter
+        INTERPRETER   = Interpreter(model_path=model_path)
+        PREDICTION_FN = INTERPRETER.get_signature_runner("serving_default")
+        print(f"[OK] TFLite model loaded — {model_path}")
+    except Exception as e:
+        print(f"[ERROR] Failed to load TFLite model: {e}")
+        return
+
+    if os.path.exists(map_path):
+        with open(map_path) as f:
+            raw = json.load(f)
+        ORD2SIGN = {int(k): v["sign"] for k, v in raw.items()}
+        print(f"[OK] Sign map loaded — {len(ORD2SIGN)} signs")
     else:
-        print("[WARN] No trained model found. Run training/train_model.py first.")
+        print("[WARN] vocab_map.json not found")
+
+    if os.path.exists(format_path):
+        FORMAT_DF = pd.read_parquet(format_path)
+        print(f"[OK] Format loaded — {FORMAT_DF.shape[0]} landmark slots")
+    else:
+        print("[WARN] vocab_format.parquet not found")
 
 load_model()
 
-# ── Sign buffer ───────────────────────────────────────────────────────────────
+# ── Landmark processing ───────────────────────────────────────────────────────
+def build_frame_df(landmarks_dict: dict, frame_idx: int) -> pd.DataFrame:
+    """
+    Convert one frame of landmark data from the frontend into a DataFrame
+    matching the vocab_format.parquet structure.
+
+    landmarks_dict keys:
+      faceLandmarks      — list of {x, y, z}  (468 points)
+      poseLandmarks      — list of {x, y, z}  (33 points)
+      leftHandLandmarks  — list of {x, y, z}  (21 points)
+      rightHandLandmarks — list of {x, y, z}  (21 points)
+    """
+    def extract(lm_list, type_name):
+        if not lm_list:
+            return pd.DataFrame(columns=["type", "landmark_index", "x", "y", "z"])
+        rows = []
+        for i, pt in enumerate(lm_list):
+            rows.append({
+                "type": type_name,
+                "landmark_index": i,
+                "x": float(pt.get("x", 0) or 0),
+                "y": float(pt.get("y", 0) or 0),
+                "z": float(pt.get("z", 0) or 0),
+            })
+        return pd.DataFrame(rows)
+
+    face       = extract(landmarks_dict.get("faceLandmarks"),      "face")
+    pose       = extract(landmarks_dict.get("poseLandmarks"),      "pose")
+    left_hand  = extract(landmarks_dict.get("leftHandLandmarks"),  "left_hand")
+    right_hand = extract(landmarks_dict.get("rightHandLandmarks"), "right_hand")
+
+    combined = pd.concat([face, left_hand, pose, right_hand], ignore_index=True)
+
+    # Merge with format to ensure correct landmark order and fill missing with NaN
+    merged = FORMAT_DF.merge(combined, on=["type", "landmark_index"], how="left")
+    merged["frame"] = frame_idx
+    return merged
+
+
+def predict_from_frames(all_frames_df: pd.DataFrame):
+    """Run TFLite inference on accumulated landmark frames."""
+    if PREDICTION_FN is None or FORMAT_DF is None:
+        return None
+
+    try:
+        data = all_frames_df[["x", "y", "z"]].values
+        n_frames = int(len(data) / ROWS_PER_FRAME)
+        if n_frames < 1:
+            return None
+
+        xyz = data.reshape(n_frames, ROWS_PER_FRAME, 3).astype(np.float32)
+        prediction = PREDICTION_FN(inputs=xyz)
+        outputs = pd.Series(prediction["outputs"])
+
+        if outputs.isna().all():
+            return None
+
+        top_indices = outputs.fillna(-np.inf).argsort()[::-1][:5]
+        results = []
+        for i in top_indices:
+            results.append({
+                "sign":       ORD2SIGN.get(i, "UNKNOWN"),
+                "confidence": float(outputs[i]),
+                "sign_id":    int(i),
+            })
+        return results
+
+    except Exception as e:
+        print(f"[ERROR] predict_from_frames: {e}")
+        return None
+
+# ── Sign buffer (sentence detection) ─────────────────────────────────────────
 class SignBuffer:
     def __init__(self, pause_threshold: float = 1.5):
-        self.signs: list[str] = []
-        self.last_sign_time: float | None = None
+        self.signs = []
+        self.last_sign_time = None
         self.pause_threshold = pause_threshold
-        self._flushed: list[str] | None = None
 
-    def add(self, sign: str) -> list[str] | None:
-        """Add a sign. Returns flushed sentence as list if a pause was detected, else None."""
+    def add(self, sign: str):
         now = time.time()
-        self._flushed = None
-
+        flushed = None
         if (self.last_sign_time is not None
                 and now - self.last_sign_time > self.pause_threshold
                 and self.signs):
-            self._flushed = list(self.signs)
+            flushed = list(self.signs)
             self.signs = []
-
-        # Deduplicate — don't append the same sign twice in a row
         if not self.signs or self.signs[-1] != sign:
             self.signs.append(sign)
-
         self.last_sign_time = now
-        return self._flushed
+        return flushed
 
-    def force_flush(self) -> list[str]:
+    def force_flush(self):
         result = list(self.signs)
         self.signs = []
         self.last_sign_time = None
         return result
 
+def gloss_to_sentence(signs):
+    words = [s.replace("-", " ").lower() for s in signs]
+    deduped = []
+    for w in words:
+        if not deduped or deduped[-1] != w:
+            deduped.append(w)
+    return " ".join(deduped).capitalize() + "."
+
 # ── REST endpoints ─────────────────────────────────────────────────────────────
-
-class PredictRequest(BaseModel):
-    frames: list[list[float]]  # shape (30, 63)
-
-class TranslateRequest(BaseModel):
-    signs: list[str]
-
 @app.get("/status")
 def status():
     return {
-        "model_loaded": MODEL is not None,
-        "num_signs": len(LABELS),
-        "signs": list(LABELS.values()) if LABELS else []
+        "model_loaded": INTERPRETER is not None,
+        "num_signs":    len(ORD2SIGN),
+        "signs":        list(ORD2SIGN.values()) if ORD2SIGN else [],
+        "model":        "vocab_model_hoyso48.tflite",
     }
 
-@app.post("/predict")
-def predict(req: PredictRequest):
-    if MODEL is None:
-        return {"sign": None, "confidence": 0.0, "error": "Model not loaded"}
-
-    frames = np.array(req.frames)
-    if frames.shape != (30, 63):
-        return {"sign": None, "confidence": 0.0, "error": f"Expected (30,63), got {frames.shape}"}
-
-    X = frames.reshape(1, 30, 63)
-    probs = MODEL.predict(X, verbose=0)[0]
-    top_idx = int(np.argmax(probs))
-    confidence = float(probs[top_idx])
-
-    if confidence < 0.72:
-        return {"sign": None, "confidence": confidence}
-
-    sign = LABELS.get(str(top_idx), "UNKNOWN")
-    return {"sign": sign, "confidence": round(confidence, 4)}
-
-@app.post("/translate")
-def translate(req: TranslateRequest):
-    """
-    Gloss-to-English without LLM.
-    Simple rule-based cleanup: lowercase, strip duplicates, join.
-    Swap this function body for an LLM call when you have an API key.
-    """
-    if not req.signs:
-        return {"sentence": ""}
-
-    # Basic cleanup: join and lowercase
-    words = []
-    for s in req.signs:
-        w = s.replace("-", " ").lower()
-        if not words or words[-1] != w:
-            words.append(w)
-
-    sentence = " ".join(words).capitalize() + "."
-    return {"sentence": sentence, "gloss": " ".join(req.signs)}
-
-# ── WebSocket for real-time streaming ─────────────────────────────────────────
-connected_buffers: dict[str, SignBuffer] = {}
+# ── WebSocket ─────────────────────────────────────────────────────────────────
+connected: dict[str, dict] = {}
 
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
     await websocket.accept()
-    buf = SignBuffer(pause_threshold=1.5)
-    connected_buffers[client_id] = buf
-    print(f"[WS] Client {client_id} connected")
+    connected[client_id] = {
+        "frames":     [],
+        "frame_idx":  0,
+        "buf":        SignBuffer(pause_threshold=1.5),
+    }
+    print(f"[WS] {client_id} connected")
 
     try:
         while True:
-            data = await websocket.receive_json()
+            data   = await websocket.receive_json()
             action = data.get("action")
+            state  = connected[client_id]
 
-            if action == "predict":
-                frames = np.array(data["frames"])
-                if MODEL is None or frames.shape != (30, 63):
-                    await websocket.send_json({"type": "error", "message": "Model not ready"})
+            # ── Receive one frame of holistic landmarks ────────────────────────
+            if action == "frame":
+                if INTERPRETER is None or FORMAT_DF is None:
+                    continue
+                state["frame_idx"] += 1
+                frame_df = build_frame_df(data.get("landmarks", {}),
+                                          state["frame_idx"])
+                state["frames"].append(frame_df)
+
+            # ── Run prediction on accumulated frames ──────────────────────────
+            elif action == "predict":
+                if not state["frames"]:
+                    await websocket.send_json({"type": "prediction",
+                                               "sign": None, "confidence": 0.0,
+                                               "buffer": state["buf"].signs})
                     continue
 
-                X = frames.reshape(1, 30, 63)
-                probs = MODEL.predict(X, verbose=0)[0]
-                top_idx = int(np.argmax(probs))
-                confidence = float(probs[top_idx])
-                sign = None
+                all_df  = pd.concat(state["frames"]).reset_index(drop=True)
+                results = predict_from_frames(all_df)
+                state["frames"] = []
+                gc.collect()
 
-                if confidence >= 0.72:
-                    sign = LABELS.get(str(top_idx), "UNKNOWN")
-                    flushed = buf.add(sign)
-                    if flushed:
-                        # Sentence complete — translate and send
-                        gloss = " ".join(flushed)
-                        words = [s.replace("-", " ").lower() for s in flushed]
-                        sentence = " ".join(words).capitalize() + "."
-                        await websocket.send_json({
-                            "type": "sentence",
-                            "gloss": gloss,
-                            "sentence": sentence,
-                            "signs": flushed
-                        })
+                if not results:
+                    await websocket.send_json({"type": "prediction",
+                                               "sign": None, "confidence": 0.0,
+                                               "buffer": state["buf"].signs})
+                    continue
 
-                await websocket.send_json({
-                    "type": "prediction",
-                    "sign": sign,
-                    "confidence": round(confidence, 4),
-                    "buffer": buf.signs
-                })
+                best = results[0]
+                sign = best["sign"]
+                conf = best["confidence"]
 
-            elif action == "flush":
-                flushed = buf.force_flush()
+                flushed = state["buf"].add(sign)
                 if flushed:
-                    gloss = " ".join(flushed)
-                    words = [s.replace("-", " ").lower() for s in flushed]
-                    sentence = " ".join(words).capitalize() + "."
+                    sentence = gloss_to_sentence(flushed)
                     await websocket.send_json({
-                        "type": "sentence",
-                        "gloss": gloss,
+                        "type":     "sentence",
                         "sentence": sentence,
-                        "signs": flushed
+                        "gloss":    " ".join(flushed),
+                        "signs":    flushed,
                     })
 
+                await websocket.send_json({
+                    "type":       "prediction",
+                    "sign":       sign,
+                    "confidence": round(conf, 4),
+                    "buffer":     state["buf"].signs,
+                    "top5":       results,
+                })
+
+            # ── Force flush sentence ───────────────────────────────────────────
+            elif action == "flush":
+                flushed = state["buf"].force_flush()
+                state["frames"] = []
+                if flushed:
+                    sentence = gloss_to_sentence(flushed)
+                    await websocket.send_json({
+                        "type":     "sentence",
+                        "sentence": sentence,
+                        "gloss":    " ".join(flushed),
+                        "signs":    flushed,
+                    })
+
+            # ── Update pause threshold ─────────────────────────────────────────
+            elif action == "set_pause":
+                state["buf"].pause_threshold = float(data.get("value", 1.5))
+
     except WebSocketDisconnect:
-        print(f"[WS] Client {client_id} disconnected")
-        connected_buffers.pop(client_id, None)
+        print(f"[WS] {client_id} disconnected")
+        connected.pop(client_id, None)

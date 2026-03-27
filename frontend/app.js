@@ -1,23 +1,34 @@
-import {
-  HandLandmarker,
-  FilesetResolver,
-  DrawingUtils,
-} from "./vision_bundle.js";
+/**
+ * ASL Translator — app.js (Holistic landmark version)
+ * Uses MediaPipe Holistic to extract 543 landmarks (face + hands + pose)
+ * and sends them to the FastAPI backend which runs the hoyso48 TFLite model.
+ *
+ * Pipeline:
+ *   Camera → Holistic (543 landmarks) → WebSocket → TFLite → Sign prediction
+ */
 
-const FRAME_SIZE       = 30;
-const STEP_SIZE        = 10;
-const NUM_FEATURES     = 63;
+// ── MediaPipe Holistic (CDN — works without local files) ──────────────────────
+// We load Holistic from CDN since it is a different model than HandLandmarker
+const HOLISTIC_SCRIPT = "https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5.1675471629/holistic.js";
+const HOLISTIC_UTILS  = "https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js";
+const DRAWING_UTILS   = "https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1675466124/drawing_utils.js";
+
+// ── Constants ─────────────────────────────────────────────────────────────────
 const CLIENT_ID        = Math.random().toString(36).slice(2);
 const CONTROLS_TIMEOUT = 3000;
+const SEND_EVERY_N     = 15; // send accumulated frames every N frames (~0.5s at 30fps)
 
-const ringBuffer = new Float32Array(FRAME_SIZE * NUM_FEATURES);
-let   ringHead   = 0;
-let   ringFilled = 0;
-
+// ── Helpers ───────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
-function getApiBase() { return $('backendUrl')?.value?.trim().replace(/\/$/, '') || 'http://localhost:8000'; }
-function getWsBase()  { return getApiBase().replace(/^http/, 'ws'); }
 
+function getApiBase() {
+  return $('backendUrl')?.value?.trim().replace(/\/$/, '') || 'http://localhost:8000';
+}
+function getWsBase() {
+  return getApiBase().replace(/^https/, 'wss').replace(/^http/, 'ws');
+}
+
+// ── DOM refs ──────────────────────────────────────────────────────────────────
 const video            = $('video');
 const canvas           = $('overlay');
 const ctx              = canvas?.getContext('2d');
@@ -51,9 +62,9 @@ const toastEl          = $('toast');
 const celebCanvas      = $('celebrationCanvas');
 
 let celebCtx          = null;
-let handLandmarker    = null;
 let ws                = null;
-let frameCount        = 0;
+let holistic          = null;
+let holisticCamera    = null;
 let isRunning         = false;
 let lastSentence      = '';
 let sentenceTotal     = 0;
@@ -61,7 +72,18 @@ let handVisible       = false;
 let lastSignText      = '';
 let lastChipSigns     = [];
 let controlsHideTimer = null;
-let mpReady           = false;
+let frameCount        = 0;
+
+// ── Load MediaPipe scripts dynamically ────────────────────────────────────────
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 let toastTimer;
@@ -82,16 +104,16 @@ function addRipple(btn, e) {
   btn.appendChild(r);
   r.addEventListener('animationend', () => r.remove(), { once: true });
 }
-btnStart.addEventListener('click', e => addRipple(btnStart, e));
+btnStart?.addEventListener('click', e => addRipple(btnStart, e));
 
 // ── Controls auto-hide ────────────────────────────────────────────────────────
 function showControls() {
-  controls.classList.remove('hidden');
-  topBar.classList.remove('hidden');
+  controls?.classList.remove('hidden');
+  topBar?.classList.remove('hidden');
   clearTimeout(controlsHideTimer);
   controlsHideTimer = setTimeout(() => {
-    controls.classList.add('hidden');
-    topBar.classList.add('hidden');
+    controls?.classList.add('hidden');
+    topBar?.classList.add('hidden');
   }, CONTROLS_TIMEOUT);
 }
 
@@ -113,15 +135,16 @@ function setStatus(state, text) {
 async function checkBackend() {
   setStatus('', 'Checking…');
   try {
-    const r = await fetch(`${getApiBase()}/status`, { signal: AbortSignal.timeout(3500) });
+    const r = await fetch(`${getApiBase()}/status`, { signal: AbortSignal.timeout(4000) });
     const d = await r.json();
     if (d.model_loaded) {
       setStatus('ok', `${d.num_signs} signs`);
-      if (modelInfo) modelInfo.textContent = `✓ ${d.num_signs} signs loaded\n${d.signs.join(', ')}`;
+      const info = `✓ ${d.num_signs} signs loaded\nModel: ${d.model || 'hoyso48'}\n${d.signs.slice(0,10).join(', ')}…`;
+      if (modelInfo) modelInfo.textContent = info;
     } else {
       setStatus('warn', 'No model');
-      if (modelInfo) modelInfo.textContent = '⚠ No model\nRun train_model.py first';
-      toast('⚠ No trained model — run train_model.py first', 5000);
+      if (modelInfo) modelInfo.textContent = '⚠ No model\nCopy model files to backend/model/';
+      toast('⚠ No model found', 5000);
     }
   } catch {
     setStatus('error', 'Offline');
@@ -136,56 +159,136 @@ function connectWS() {
   ws = new WebSocket(`${getWsBase()}/ws/${CLIENT_ID}`);
   ws.onmessage = (e) => {
     const msg = JSON.parse(e.data);
-    if (msg.type === 'prediction') { updateHUD(msg.sign, msg.confidence); updateChips(msg.buffer || []); }
-    if (msg.type === 'sentence')   { addSentence(msg.sentence, msg.gloss); updateChips([]); }
+    if (msg.type === 'prediction') {
+      updateHUD(msg.sign, msg.confidence);
+      updateChips(msg.buffer || []);
+    }
+    if (msg.type === 'sentence') {
+      addSentence(msg.sentence, msg.gloss);
+      updateChips([]);
+    }
   };
   ws.onclose = () => setTimeout(connectWS, 3000);
 }
 
-// ── MediaPipe — idle prefetch ─────────────────────────────────────────────────
-function prefetchMediaPipe() {
-  if (mpReady) return;
-    FilesetResolver.forVisionTasks('./wasm'
-      ).then(v => { window.__mpVision = v; }).catch(() => {});
-}
-if ('requestIdleCallback' in window) requestIdleCallback(prefetchMediaPipe, { timeout: 3000 });
-else setTimeout(prefetchMediaPipe, 1200);
-
-async function initMediaPipe() {
-  if (mpReady) return;
+// ── MediaPipe Holistic ────────────────────────────────────────────────────────
+async function initHolistic() {
   toast('Loading hand detection…');
-  const vision = window.__mpVision || await FilesetResolver.forVisionTasks('./wasm');
-  handLandmarker = await HandLandmarker.createFromOptions(vision, {
-    baseOptions: {
-      modelAssetPath: './hand_landmarker.task',
-      delegate: 'GPU',
-    },
-    runningMode: 'VIDEO', numHands: 2,
-    minHandDetectionConfidence: 0.55,
-    minHandPresenceConfidence:  0.50,
-    minTrackingConfidence:      0.50,
+
+  // Load all three MediaPipe scripts
+  await loadScript(HOLISTIC_UTILS);
+  await loadScript(DRAWING_UTILS);
+  await loadScript(HOLISTIC_SCRIPT);
+
+  holistic = new window.Holistic({
+    locateFile: (file) =>
+      `https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5.1675471629/${file}`
   });
-  mpReady = true;
+
+  holistic.setOptions({
+    modelComplexity:           1,
+    smoothLandmarks:           true,
+    enableSegmentation:        false,
+    smoothSegmentation:        false,
+    refineFaceLandmarks:       false,
+    minDetectionConfidence:    0.5,
+    minTrackingConfidence:     0.5,
+  });
+
+  holistic.onResults(onHolisticResults);
+
   toast('Ready — show your hands ✋');
 }
 
-// ── Camera ────────────────────────────────────────────────────────────────────
+// ── Draw landmarks on canvas ──────────────────────────────────────────────────
+function onHolisticResults(results) {
+  if (!canvas || !ctx) return;
+
+  // Resize canvas to match video
+  if (canvas.width  !== video.videoWidth)  canvas.width  = video.videoWidth;
+  if (canvas.height !== video.videoHeight) canvas.height = video.videoHeight;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Detect hand presence for pulse ring
+  const hasHand = !!(results.leftHandLandmarks || results.rightHandLandmarks);
+  if (hasHand !== handVisible) {
+    handVisible = hasHand;
+    handRing?.classList.toggle('active', hasHand);
+  }
+
+  // Draw hand connections
+  if (results.leftHandLandmarks) {
+    window.drawConnectors(ctx, results.leftHandLandmarks,
+      window.HAND_CONNECTIONS, { color: 'rgba(41,196,154,.35)', lineWidth: 1.5 });
+    window.drawLandmarks(ctx, results.leftHandLandmarks,
+      { color: 'rgba(41,196,154,.8)', lineWidth: 1, radius: 3 });
+  }
+  if (results.rightHandLandmarks) {
+    window.drawConnectors(ctx, results.rightHandLandmarks,
+      window.HAND_CONNECTIONS, { color: 'rgba(41,196,154,.35)', lineWidth: 1.5 });
+    window.drawLandmarks(ctx, results.rightHandLandmarks,
+      { color: 'rgba(41,196,154,.8)', lineWidth: 1, radius: 3 });
+  }
+
+  // Send frame data to backend
+  if (ws?.readyState === 1) {
+    frameCount++;
+
+    // Send each frame as it arrives
+    ws.send(JSON.stringify({
+      action: 'frame',
+      landmarks: {
+        faceLandmarks:      results.faceLandmarks      || null,
+        poseLandmarks:      results.poseLandmarks      || null,
+        leftHandLandmarks:  results.leftHandLandmarks  || null,
+        rightHandLandmarks: results.rightHandLandmarks || null,
+      }
+    }));
+
+    // Every SEND_EVERY_N frames, trigger prediction
+    if (frameCount % SEND_EVERY_N === 0) {
+      ws.send(JSON.stringify({ action: 'predict' }));
+      frameCount = 0;
+    }
+  }
+}
+
+// ── Start camera ──────────────────────────────────────────────────────────────
 async function startCamera() {
   btnStart.disabled = true;
   btnStart.querySelector('.btn-label').textContent = 'Starting…';
+
   try {
+    // Load holistic if not already loaded
+    if (!holistic) await initHolistic();
+
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
       audio: false,
     });
+
     video.srcObject = stream;
     await video.play();
-    startScreen.classList.add('gone');
-    btnFlush.disabled = false;
+
+    // Use MediaPipe Camera utility to feed frames to Holistic
+    holisticCamera = new window.Camera(video, {
+      onFrame: async () => {
+        if (holistic) await holistic.send({ image: video });
+      },
+      width:  1280,
+      height: 720,
+    });
+    holisticCamera.start();
+
+    startScreen?.classList.add('gone');
+    btnFlush && (btnFlush.disabled = false);
     isRunning = true;
     connectWS();
-    requestAnimationFrame(processFrame);
     showControls();
+
+    btnStart.querySelector('.btn-label').textContent = 'Camera On';
+    btnStart.disabled = false;
+
   } catch (err) {
     btnStart.disabled = false;
     btnStart.querySelector('.btn-label').textContent = 'Start Camera';
@@ -193,102 +296,28 @@ async function startCamera() {
   }
 }
 
-// ── Ring buffer ───────────────────────────────────────────────────────────────
-function normaliseIntoRing(lms) {
-  const w    = lms[0];
-  const base = ringHead * NUM_FEATURES;
-  for (let i = 0; i < 21; i++) {
-    ringBuffer[base+i*3]   = lms[i].x - w.x;
-    ringBuffer[base+i*3+1] = lms[i].y - w.y;
-    ringBuffer[base+i*3+2] = lms[i].z - w.z;
-  }
-  const tx = ringBuffer[base+36], ty = ringBuffer[base+37], tz = ringBuffer[base+38];
-  const s  = Math.sqrt(tx*tx+ty*ty+tz*tz) || 1;
-  for (let j = 0; j < NUM_FEATURES; j++) ringBuffer[base+j] /= s;
-}
-
-function writeZeroFrame() { ringBuffer.fill(0, ringHead*NUM_FEATURES, ringHead*NUM_FEATURES+NUM_FEATURES); }
-
-function advanceRing() {
-  ringHead = (ringHead+1) % FRAME_SIZE;
-  if (ringFilled < FRAME_SIZE) ringFilled++;
-}
-
-function ringToArray() {
-  const out = [];
-  for (let i = 0; i < FRAME_SIZE; i++) {
-    const idx = ((ringHead-FRAME_SIZE+i+FRAME_SIZE) % FRAME_SIZE) * NUM_FEATURES;
-    const row = [];
-    for (let j = 0; j < NUM_FEATURES; j++) row.push(ringBuffer[idx+j]);
-    out.push(row);
-  }
-  return out;
-}
-
-// ── Draw landmarks ────────────────────────────────────────────────────────────
-function drawOverlay(result) {
-  const vw = video.videoWidth  || canvas.offsetWidth;
-  const vh = video.videoHeight || canvas.offsetHeight;
-  if (canvas.width !== vw)  canvas.width  = vw;
-  if (canvas.height !== vh) canvas.height = vh;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  const hasHand = result.landmarks?.length > 0;
-  if (hasHand !== handVisible) {
-    handVisible = hasHand;
-    handRing.classList.toggle('active', hasHand);
-  }
-  if (!hasHand) return;
-
-  const du = new DrawingUtils(ctx);
-  for (const hl of result.landmarks) {
-    du.drawConnectors(hl, HandLandmarker.HAND_CONNECTIONS, { color: 'rgba(41,196,154,.3)', lineWidth: 1.5 });
-    du.drawLandmarks(hl, {
-      color: 'rgba(41,196,154,.75)',
-      radius: d => DrawingUtils.lerp(d.from?.z ?? 0, -0.15, 0.1, 5, 1),
-      lineWidth: 1,
-    });
-  }
-}
-
-// ── Frame loop ────────────────────────────────────────────────────────────────
-function processFrame() {
-  if (!isRunning) return;
-  requestAnimationFrame(processFrame);
-  if (!handLandmarker || video.readyState < 2) return;
-
-  const result = handLandmarker.detectForVideo(video, performance.now());
-  drawOverlay(result);
-
-  if (result.landmarks?.length > 0) normaliseIntoRing(result.landmarks[0]);
-  else writeZeroFrame();
-  advanceRing();
-
-  frameCount++;
-  if (ringFilled === FRAME_SIZE && frameCount % STEP_SIZE === 0 && ws?.readyState === 1) {
-    ws.send(JSON.stringify({ action: 'predict', frames: ringToArray() }));
-  }
-}
-
 // ── HUD ───────────────────────────────────────────────────────────────────────
 function updateHUD(sign, conf) {
-  const thresh  = parseInt(confThresh.value) / 100;
+  const thresh  = parseInt(confThresh?.value ?? 50) / 100;
   const valid   = !!(sign && conf >= thresh);
   const newSign = valid && sign !== lastSignText;
 
   if (newSign)  lastSignText = sign;
   if (!valid)   lastSignText = '';
 
-  signWord.textContent = valid ? sign : '';
-  signWord.className   = `sign-word${valid ? '' : ' dim'}${newSign ? ' pop' : ''}`;
-  if (newSign) setTimeout(() => signWord.classList.remove('pop'), 280);
+  if (signWord) {
+    signWord.textContent = valid ? sign : '';
+    signWord.className   = `sign-word${valid ? '' : ' dim'}${newSign ? ' pop' : ''}`;
+    if (newSign) setTimeout(() => signWord.classList.remove('pop'), 280);
+  }
 }
 
 function updateChips(signs) {
-  if (signs.length === lastChipSigns.length && signs.every((s,i) => s === lastChipSigns[i])) return;
+  if (signs.length === lastChipSigns.length &&
+      signs.every((s, i) => s === lastChipSigns[i])) return;
   lastChipSigns = [...signs];
-  if (!signs.length) { sentenceChips.innerHTML = ''; return; }
-  sentenceChips.innerHTML = signs.map((s, i) =>
+  if (!signs.length) { if (sentenceChips) sentenceChips.innerHTML = ''; return; }
+  if (sentenceChips) sentenceChips.innerHTML = signs.map((s, i) =>
     `<span class="s-chip${i === signs.length-1 ? ' new' : ''}">${s}</span>`
   ).join('');
 }
@@ -300,16 +329,18 @@ function addSentence(sentence, gloss) {
   const isFirst     = sentenceTotal === 1;
   const isMilestone = sentenceTotal % 5 === 0;
 
-  btnSpeak.disabled = false;
-  sentenceText.textContent = sentence;
-  sentenceText.classList.remove('placeholder');
+  if (btnSpeak) btnSpeak.disabled = false;
+  if (sentenceText) {
+    sentenceText.textContent = sentence;
+    sentenceText.classList.remove('placeholder');
+  }
 
-  historyList.querySelector('.history-empty')?.remove();
+  historyList?.querySelector('.history-empty')?.remove();
   const card = document.createElement('div');
   card.className = 'h-card';
   card.innerHTML = `<div class="h-card-text">${sentence}</div>
     <div class="h-card-meta">${new Date().toLocaleTimeString()} &nbsp;·&nbsp; <span class="h-card-gloss">${gloss}</span></div>`;
-  historyList.prepend(card);
+  historyList?.prepend(card);
 
   if (isFirst || isMilestone) {
     celebrate();
@@ -333,8 +364,11 @@ function speak(text) {
 
 // ── Celebration ───────────────────────────────────────────────────────────────
 function celebrate() {
-  if (!celebCtx) celebCtx = celebCanvas.getContext('2d');
-  if (celebCanvas.width !== window.innerWidth)  celebCanvas.width  = window.innerWidth;
+  if (!celebCtx) {
+    if (!celebCanvas) return;
+    celebCtx = celebCanvas.getContext('2d');
+  }
+  if (celebCanvas.width !== window.innerWidth)   celebCanvas.width  = window.innerWidth;
   if (celebCanvas.height !== window.innerHeight) celebCanvas.height = window.innerHeight;
   celebCanvas.style.display = 'block';
 
@@ -372,13 +406,15 @@ function celebrate() {
 
 // ── Clear ─────────────────────────────────────────────────────────────────────
 function clearAll() {
-  sentenceText.textContent = 'Completed sentences appear here';
-  sentenceText.classList.add('placeholder');
-  sentenceChips.innerHTML = '';
+  if (sentenceText) {
+    sentenceText.textContent = 'Completed sentences appear here';
+    sentenceText.classList.add('placeholder');
+  }
+  if (sentenceChips) sentenceChips.innerHTML = '';
   updateHUD(null, 0);
   lastSentence = ''; sentenceTotal = 0; lastSignText = ''; lastChipSigns = [];
-  historyList.innerHTML = '<div class="history-empty">No translations yet</div>';
-  btnSpeak.disabled = true;
+  if (historyList) historyList.innerHTML = '<div class="history-empty">No translations yet</div>';
+  if (btnSpeak) btnSpeak.disabled = true;
   toast('Cleared');
 }
 
@@ -389,48 +425,45 @@ function flush() {
 }
 
 // ── Panels ────────────────────────────────────────────────────────────────────
-btnSettings.addEventListener('click', () => {
-  settingsPanel.classList.add('open');
+btnSettings?.addEventListener('click', () => {
+  settingsPanel?.classList.add('open');
   clearTimeout(controlsHideTimer);
 });
-btnSettingsClose.addEventListener('click', () => {
-  settingsPanel.classList.remove('open');
+btnSettingsClose?.addEventListener('click', () => {
+  settingsPanel?.classList.remove('open');
   showControls();
 });
-settingsPanel.addEventListener('click', (e) => {
+settingsPanel?.addEventListener('click', (e) => {
   if (e.target === settingsPanel) settingsPanel.classList.remove('open');
 });
-
-sentenceText.addEventListener('click', () => {
-  if (sentenceTotal > 0) historyPanel.classList.add('open');
+sentenceText?.addEventListener('click', () => {
+  if (sentenceTotal > 0) historyPanel?.classList.add('open');
 });
-btnHistoryClose.addEventListener('click', () => historyPanel.classList.remove('open'));
-historyPanel.addEventListener('click', (e) => {
+btnHistoryClose?.addEventListener('click', () => historyPanel?.classList.remove('open'));
+historyPanel?.addEventListener('click', (e) => {
   if (e.target === historyPanel) historyPanel.classList.remove('open');
 });
 
 // ── Sliders ───────────────────────────────────────────────────────────────────
-confThresh.addEventListener('input', () => {
-  confThreshVal.textContent = `${confThresh.value}%`;
+confThresh?.addEventListener('input', () => {
+  if (confThreshVal) confThreshVal.textContent = `${confThresh.value}%`;
 });
-pauseThresh.addEventListener('input', () => {
+pauseThresh?.addEventListener('input', () => {
   const val = (parseInt(pauseThresh.value)/10).toFixed(1);
-  pauseThreshVal.textContent = `${val}s`;
+  if (pauseThreshVal) pauseThreshVal.textContent = `${val}s`;
   ws?.readyState === 1 && ws.send(JSON.stringify({ action: 'set_pause', value: parseFloat(val) }));
 });
 
 // ── Button wiring ─────────────────────────────────────────────────────────────
-btnStart.addEventListener('click', async () => {
-  if (!mpReady) await initMediaPipe();
-  await startCamera();
-});
-btnFlush.addEventListener('click', flush);
-btnClear.addEventListener('click', clearAll);
-btnSpeak.addEventListener('click', () => { if (lastSentence) speak(lastSentence); });
+btnStart?.addEventListener('click', startCamera);
+btnFlush?.addEventListener('click', flush);
+btnClear?.addEventListener('click', clearAll);
+btnSpeak?.addEventListener('click', () => { if (lastSentence) speak(lastSentence); });
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
-sentenceText.classList.add('placeholder');
+if (sentenceText) sentenceText.classList.add('placeholder');
 checkBackend();
 window.speechSynthesis?.getVoices();
 speechSynthesis.addEventListener?.('voiceschanged', () => speechSynthesis.getVoices());
 console.log('%c✋ ASL Translator', 'font-size:18px;font-weight:bold;color:#29c49a');
+console.log('%cPowered by hoyso48 TFLite model (Kaggle 1st place)', 'color:#7a7a8e');
