@@ -1,10 +1,6 @@
 # Virtual environment
 asl_env/
 
-# Trained model (large files)
-backend/model/*.h5
-backend/model/*.tflite
-
 # Collected data (can be large, personal)
 data/raw/
 
@@ -23,9 +19,3 @@ frontend/hand_landmarker.task
 frontend/vision_bundle.js
 frontend/wasm/
 
-# Training plots
-backend/model/training_plot.pngdata/
-backend/model/*.h5
-backend/model/*.json
-backend/model/*.png
-data/
