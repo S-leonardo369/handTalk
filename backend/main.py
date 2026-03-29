@@ -1,4 +1,5 @@
 import os, json, time
+from pathlib import Path
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -14,15 +15,20 @@ GATES = {
     "consecutive": 2,
     "motion":      0.004,
 }
-MAX_FRAMES = 256  # hard cap to prevent unbounded memory; ~8s at 30fps
+MAX_FRAMES = 256
 
-# ── Model loading ─────────────────────────────────────────────────────────────
+# ── Globals ───────────────────────────────────────────────────────────────────
 TF_MODEL       = None
 ORD2SIGN       = {}
 ROWS_PER_FRAME = None
-FORMAT_GROUPS  = None   # precomputed: group name per FORMAT_DF row
-FORMAT_INDICES = None   # precomputed: landmark_index per FORMAT_DF row
-NOSE_ROW       = None   # row index of nose landmark for normalisation
+FORMAT_GROUPS  = None
+FORMAT_INDICES = None
+NOSE_ROW       = None
+MODEL_NAME     = None
+MODEL_ERROR    = None
+
+GROUP_MASKS = {}
+GROUP_ROWS  = {}
 
 _GROUP_TO_KEY = {
     "face":       "faceLandmarks",
@@ -31,290 +37,256 @@ _GROUP_TO_KEY = {
     "right_hand": "rightHandLandmarks",
 }
 
+# ── Load model ────────────────────────────────────────────────────────────────
 def load_model():
     global TF_MODEL, ORD2SIGN, ROWS_PER_FRAME
     global FORMAT_GROUPS, FORMAT_INDICES, NOSE_ROW
+    global GROUP_MASKS, GROUP_ROWS
+    global MODEL_NAME, MODEL_ERROR
 
-    model_path  = "model/vocab_model_hoyso48.tflite"
-    map_path    = "model/vocab_map.json"
-    format_path = "model/vocab_format.parquet"
+    base_dir    = Path(__file__).resolve().parent
+    model_path  = base_dir / "model" / "vocab_model_hoyso48.tflite"
+    map_path    = base_dir / "model" / "vocab_map.json"
+    format_path = base_dir / "model" / "vocab_format.parquet"
+    MODEL_NAME  = model_path.name
+    MODEL_ERROR = None
 
-    if not os.path.exists(model_path):
-        print("[WARN] No model found at", model_path)
-        return
+    # Reset state before (re)loading so partial loads do not leak.
+    TF_MODEL = None
+    ORD2SIGN = {}
+    GROUP_MASKS = {}
+    GROUP_ROWS = {}
+
+    if not model_path.exists() or not map_path.exists() or not format_path.exists():
+        missing = [str(p) for p in (model_path, map_path, format_path) if not p.exists()]
+        MODEL_ERROR = f"Missing model files: {', '.join(missing)}"
+        print(f"[ERROR] {MODEL_ERROR}")
+        return False
+
+    from tensorflow.lite.python.interpreter import Interpreter
 
     try:
-        from tensorflow.lite.python.interpreter import Interpreter
-        interp   = Interpreter(model_path=model_path)
-        print("[INFO] Model signatures:", interp.get_signature_list())
+        interp = Interpreter(model_path=str(model_path), num_threads=4)  # faster
         TF_MODEL = interp.get_signature_runner("serving_default")
-        print(f"[OK] TFLite model loaded — {model_path}")
-    except Exception as e:
-        print(f"[ERROR] Failed to load TFLite model: {e}")
-        return
+        print(f"[OK] Model loaded: {model_path}")
 
-    if os.path.exists(map_path):
-        with open(map_path) as f:
+        # Load sign map
+        with open(map_path, encoding="utf-8") as f:
             raw = json.load(f)
         ORD2SIGN = {int(k): v["sign"] for k, v in raw.items()}
-        print(f"[OK] Sign map loaded — {len(ORD2SIGN)} signs")
-    else:
-        print("[WARN] vocab_map.json not found")
 
-    if os.path.exists(format_path):
-        fmt            = pd.read_parquet(format_path)
+        # Load format
+        fmt = pd.read_parquet(format_path)
         ROWS_PER_FRAME = len(fmt)
-        # Precompute lookup arrays ONCE so build_frame_array has zero pandas work
+
         FORMAT_GROUPS  = fmt["type"].to_numpy()
         FORMAT_INDICES = fmt["landmark_index"].to_numpy()
-        nose_mask      = (FORMAT_GROUPS == "face") & (FORMAT_INDICES == 1)
-        NOSE_ROW       = int(np.argmax(nose_mask)) if nose_mask.any() else None
-        print(f"[OK] Format loaded — {ROWS_PER_FRAME} landmarks per frame")
-    else:
-        print("[WARN] vocab_format.parquet not found")
+
+        # Nose index
+        nose_mask = (FORMAT_GROUPS == "face") & (FORMAT_INDICES == 1)
+        NOSE_ROW  = int(np.argmax(nose_mask)) if nose_mask.any() else None
+
+        # Precompute masks for fast frame conversion.
+        for group in _GROUP_TO_KEY.keys():
+            mask = FORMAT_GROUPS == group
+            GROUP_MASKS[group] = mask
+            GROUP_ROWS[group]  = np.where(mask)[0]
+
+        print("[OK] Format + masks ready")
+        return True
+    except Exception as e:
+        MODEL_ERROR = str(e)
+        TF_MODEL = None
+        ORD2SIGN = {}
+        print(f"[ERROR] Failed loading model: {e}")
+        return False
 
 load_model()
 
-# ── Landmark processing ───────────────────────────────────────────────────────
-def build_frame_array(landmarks_dict: dict) -> np.ndarray | None:
-    """
-    Convert one frame of landmark data into shape (ROWS_PER_FRAME, 3).
-    Uses precomputed FORMAT_GROUPS/FORMAT_INDICES — no pandas in the hot path.
-    """
-    if TF_MODEL is None or ROWS_PER_FRAME is None:
-        return None
+# ── Frame processing ──────────────────────────────────────────────────────────
+def build_frame_array(landmarks_dict: dict):
+    group_arrays = {}
 
-    group_arrays: dict[str, np.ndarray | None] = {}
     for group, key in _GROUP_TO_KEY.items():
         lm_list = landmarks_dict.get(key)
         if lm_list:
             group_arrays[group] = np.array(
-                [[p.get("x", 0.0), p.get("y", 0.0), p.get("z", 0.0)] for p in lm_list],
-                dtype=np.float32,
+                [[p["x"], p["y"], p["z"]] for p in lm_list],
+                dtype=np.float32
             )
         else:
             group_arrays[group] = None
 
     out = np.zeros((ROWS_PER_FRAME, 3), dtype=np.float32)
+
     for group, arr in group_arrays.items():
         if arr is None:
             continue
-        mask    = FORMAT_GROUPS == group
+
+        mask    = GROUP_MASKS[group]
+        rows    = GROUP_ROWS[group]
         indices = FORMAT_INDICES[mask]
-        rows    = np.where(mask)[0]
-        valid   = indices < len(arr)
+
+        valid = indices < len(arr)
         out[rows[valid]] = arr[indices[valid]]
 
-    # Nose-centred normalisation
     if NOSE_ROW is not None:
-        out -= out[NOSE_ROW]
+        nose = out[NOSE_ROW].copy()
+        out -= nose
 
     return out
 
 # ── Inference ─────────────────────────────────────────────────────────────────
-def predict_from_sequence(seq: np.ndarray) -> list | None:
-    """
-    Run TFLite inference on shape (n_frames, 543, 3) — variable length.
-    Returns top-5 predictions or None if gated out.
-    """
-    if TF_MODEL is None:
-        return None
-
+def predict_from_sequence(seq):
     try:
-        inp    = seq.astype(np.float32)               # (n_frames, 543, 3) — no batch dim, model handles it
-        probs  = np.array(TF_MODEL(inputs=inp)["outputs"][0], dtype=np.float32)
+        if TF_MODEL is None:
+            return None
+        inp = np.asarray(seq, dtype=np.float32)
 
-        # Gate 1: confidence
-        top_prob = float(probs.max())
+        output = TF_MODEL(inputs=inp)
+        probs = output.get("outputs", None)
+
+        if probs is None:
+            return None
+
+        probs = np.asarray(probs, dtype=np.float32)
+
+        if probs.ndim == 2:
+            probs = probs[0]
+        elif probs.ndim == 0:
+            return None
+
+        if probs.ndim != 1 or probs.size < 2:
+            return None
+
+        # Confidence gate
+        top_idx = np.argmax(probs)
+        top_prob = float(probs[top_idx])
+
         if top_prob < GATES["confidence"]:
             return None
 
-        # Gate 2: top-2 margin  (np.partition is faster than full sort)
-        top2   = np.partition(probs, -2)[-2:]
+        # Margin gate
+        top2 = np.partition(probs, -2)[-2:]
         margin = float(top2[1] - top2[0])
+
         if margin < GATES["margin"]:
             return None
 
-        top5 = np.argpartition(probs, -5)[-5:]
-        top5 = top5[np.argsort(probs[top5])[::-1]]
+        # Top-5
+        top5_idx = np.argpartition(probs, -5)[-5:]
+        top5_idx = top5_idx[np.argsort(probs[top5_idx])[::-1]]
 
         return [
-            {"sign": ORD2SIGN.get(int(i), "UNKNOWN"), "confidence": float(probs[i]), "sign_id": int(i)}
-            for i in top5
+            {
+                "sign": ORD2SIGN.get(int(i), "UNKNOWN"),
+                "confidence": float(probs[i]),
+                "sign_id": int(i),
+            }
+            for i in top5_idx
         ]
 
     except Exception as e:
-        print(f"[ERROR] predict_from_sequence: {e}")
+        print("[ERROR]", e)
         return None
 
-# ── Sign buffer ───────────────────────────────────────────────────────────────
+# ── Buffer ────────────────────────────────────────────────────────────────────
 class SignBuffer:
-    def __init__(self, pause_threshold: float = 1.5):
-        self.signs           = []
-        self.last_sign_time  = None
-        self.pause_threshold = pause_threshold
-        self._pending_sign   = None
-        self._pending_count  = 0
+    def __init__(self):
+        self.signs = []
+        self._pending = None
+        self.count = 0
 
-    def add(self, sign: str):
-        now     = time.time()
-        flushed = None
-
-        if (self.last_sign_time is not None
-                and now - self.last_sign_time > self.pause_threshold
-                and self.signs):
-            flushed             = list(self.signs)
-            self.signs          = []
-            self._pending_sign  = None
-            self._pending_count = 0
-
-        if sign == self._pending_sign:
-            self._pending_count += 1
+    def add(self, sign):
+        if sign == self._pending:
+            self.count += 1
         else:
-            self._pending_sign  = sign
-            self._pending_count = 1
+            self._pending = sign
+            self.count = 1
 
-        if self._pending_count >= GATES["consecutive"]:
+        if self.count >= GATES["consecutive"]:
             if not self.signs or self.signs[-1] != sign:
                 self.signs.append(sign)
-            self._pending_count = 0
-            self.last_sign_time = now
+            self.count = 0
 
-        return flushed
-
-    def force_flush(self):
-        result              = list(self.signs)
-        self.signs          = []
-        self.last_sign_time = None
-        self._pending_sign  = None
-        self._pending_count = 0
-        return result
-
-def gloss_to_sentence(signs: list) -> str:
-    words   = [s.replace("-", " ").lower() for s in signs]
-    deduped = []
-    for w in words:
-        if not deduped or deduped[-1] != w:
-            deduped.append(w)
-    return " ".join(deduped).capitalize() + "."
-
-# ── REST ───────────────────────────────────────────────────────────────────────
 @app.get("/status")
 def status():
+    # Lazy retry so backend can recover if files are added after startup.
+    if TF_MODEL is None and MODEL_ERROR:
+        load_model()
     return {
         "model_loaded": TF_MODEL is not None,
-        "num_signs":    len(ORD2SIGN),
-        "signs":        list(ORD2SIGN.values())[:20],
-        "model":        "vocab_model_hoyso48.tflite",
-        "gating":       GATES,
+        "model": MODEL_NAME,
+        "error": MODEL_ERROR,
+        "num_signs": len(ORD2SIGN),
+        "signs": list(ORD2SIGN.values())[:10],
+        "example_signs": list(ORD2SIGN.values())[:10],
     }
 
 # ── WebSocket ─────────────────────────────────────────────────────────────────
-connected: dict[str, dict] = {}
-
 @app.websocket("/ws/{client_id}")
-async def websocket_endpoint(websocket: WebSocket, client_id: str):
-    await websocket.accept()
-    state = {
-        "frames":         [],
-        "buf":            SignBuffer(),
-        "prev_hand_xy":   None,
-    }
-    connected[client_id] = state
-    print(f"[WS] {client_id} connected")
+async def ws(ws: WebSocket, client_id: str):
+    await ws.accept()
+
+    frames = []
+    prev_xy = None
+    buf = SignBuffer()
 
     try:
         while True:
-            data   = await websocket.receive_json()
+            data = await ws.receive_json()
             action = data.get("action")
 
             if action == "frame":
-                if TF_MODEL is None or ROWS_PER_FRAME is None:
-                    continue
+                lm = data.get("landmarks") or {}
 
-                landmarks = data.get("landmarks", {})
+                lh = lm.get("leftHandLandmarks") or []
+                rh = lm.get("rightHandLandmarks") or []
 
-                # Gate 3: hand presence
-                lh = landmarks.get("leftHandLandmarks")  or []
-                rh = landmarks.get("rightHandLandmarks") or []
                 if not lh and not rh:
                     continue
 
-                # Gate 4: motion
-                curr_xy = np.array([[p["x"], p["y"]] for p in lh + rh], dtype=np.float32)
-                prev_xy = state["prev_hand_xy"]
-                if prev_xy is not None and prev_xy.shape == curr_xy.shape:
-                    if float(np.mean(np.abs(curr_xy - prev_xy))) < GATES["motion"]:
-                        state["prev_hand_xy"] = curr_xy
-                        continue
-                state["prev_hand_xy"] = curr_xy
+                # Fast motion calc
+                curr_xy = np.fromiter(
+                    (c for p in (lh + rh) for c in (p["x"], p["y"])),
+                    dtype=np.float32
+                ).reshape(-1, 2)
 
-                frame_arr = build_frame_array(landmarks)
-                if frame_arr is not None:
-                    state["frames"].append(frame_arr)
-                    # Hard cap — drop oldest frames if we exceed memory limit
-                    if len(state["frames"]) > MAX_FRAMES:
-                        state["frames"] = state["frames"][-MAX_FRAMES:]
+                if prev_xy is not None and prev_xy.shape == curr_xy.shape:
+                    if np.mean(np.abs(curr_xy - prev_xy)) < GATES["motion"]:
+                        prev_xy = curr_xy
+                        continue
+
+                prev_xy = curr_xy
+
+                frame = build_frame_array(lm)
+                frames.append(frame)
+
+                if len(frames) > MAX_FRAMES:
+                    del frames[:-MAX_FRAMES]
 
             elif action == "predict":
-                frames = state["frames"]
-                if not frames:
-                    await websocket.send_json({
-                        "type": "prediction", "sign": None,
-                        "confidence": 0.0, "buffer": state["buf"].signs,
-                    })
+                if not frames or TF_MODEL is None:
                     continue
 
-                window = frames[-MAX_FRAMES:]
-                seq    = np.stack(window, axis=0)   # (n_frames, 543, 3)
+                seq = np.asarray(frames, dtype=np.float32)
 
                 results = predict_from_sequence(seq)
-                state["frames"] = frames[-10:]  # keep last 10 for continuity
+
+                del frames[:-10]
 
                 if not results:
-                    await websocket.send_json({
-                        "type": "prediction", "sign": None,
-                        "confidence": 0.0, "buffer": state["buf"].signs,
-                    })
                     continue
 
-                best    = results[0]
-                flushed = state["buf"].add(best["sign"])
+                best = results[0]
+                buf.add(best["sign"])
 
-                if flushed:
-                    sentence = gloss_to_sentence(flushed)
-                    await websocket.send_json({
-                        "type": "sentence", "sentence": sentence,
-                        "gloss": " ".join(flushed), "signs": flushed,
-                    })
-
-                await websocket.send_json({
-                    "type": "prediction", "sign": best["sign"],
-                    "confidence": round(best["confidence"], 4),
-                    "buffer": state["buf"].signs, "top5": results,
+                await ws.send_json({
+                    "type": "prediction",
+                    "sign": best["sign"],
+                    "confidence": best["confidence"],
+                    "top5": results,
+                    "buffer": list(buf.signs),
                 })
-
-            elif action == "flush":
-                flushed               = state["buf"].force_flush()
-                state["frames"]       = []
-                state["prev_hand_xy"] = None
-                if flushed:
-                    sentence = gloss_to_sentence(flushed)
-                    await websocket.send_json({
-                        "type": "sentence", "sentence": sentence,
-                        "gloss": " ".join(flushed), "signs": flushed,
-                    })
-
-            elif action == "set_pause":
-                state["buf"].pause_threshold = float(data.get("value", 1.5))
-
-            elif action == "set_threshold":
-                if "confidence"  in data: GATES["confidence"]  = float(data["confidence"])
-                if "margin"      in data: GATES["margin"]       = float(data["margin"])
-                if "consecutive" in data: GATES["consecutive"]  = int(data["consecutive"])
-                if "motion"      in data: GATES["motion"]       = float(data["motion"])
-                await websocket.send_json({"type": "thresholds_updated", **GATES})
-
     except WebSocketDisconnect:
-        print(f"[WS] {client_id} disconnected")
-        connected.pop(client_id, None)
+        return
