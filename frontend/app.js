@@ -253,35 +253,69 @@ function onHolisticResults(results) {
   }
 }
 
+
 // ── Start camera ──────────────────────────────────────────────────────────────
 async function startCamera() {
   btnStart.disabled = true;
   btnStart.querySelector('.btn-label').textContent = 'Starting…';
 
   try {
-    // Load holistic if not already loaded
     if (!holistic) await initHolistic();
 
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+      video: {
+        width:     { ideal: 640 },
+        height:    { ideal: 480 },
+        frameRate: { ideal: 15, max: 20 }
+      },
       audio: false,
     });
 
     video.srcObject = stream;
     await video.play();
 
-    // Use MediaPipe Camera utility to feed frames to Holistic
+    // Wait for video to have valid frames (not just readyState)
+    const waitForValidFrame = (timeout = 3000) => new Promise((resolve, reject) => {
+      const start = Date.now();
+      const check = () => {
+        if (video.videoWidth > 0 && video.videoHeight > 0 && video.currentTime > 0) {
+          // Optional: grab a frame to confirm it's not green (if needed)
+          resolve();
+        } else if (Date.now() - start > timeout) {
+          reject(new Error('Video never produced valid frames'));
+        } else {
+          requestAnimationFrame(check);
+        }
+      };
+      check();
+    });
+
+    await waitForValidFrame(4000); // wait up to 4 seconds for DroidCam
+
+    // Optional: verify by drawing a frame to a temporary canvas (not needed usually)
+    // const testCanvas = document.createElement('canvas');
+    // testCanvas.width = video.videoWidth;
+    // testCanvas.height = video.videoHeight;
+    // testCanvas.getContext('2d').drawImage(video, 0, 0);
+    // // check pixel data for green (if necessary)
+
     holisticCamera = new window.Camera(video, {
       onFrame: async () => {
-        if (holistic) await holistic.send({ image: video });
+        // Skip frames that are not ready
+        if (!video.videoWidth || !video.videoHeight) return;
+        if (video.readyState < 2) return;
+        // Additional check: ensure timestamp is valid (avoid NaN issues)
+        if (isNaN(video.currentTime)) return;
+        await holistic.send({ image: video });
       },
-      width:  1280,
-      height: 720,
+      width:  640,
+      height: 480,
     });
+
     holisticCamera.start();
 
     startScreen?.classList.add('gone');
-    btnFlush && (btnFlush.disabled = false);
+    if (btnFlush) btnFlush.disabled = false;
     isRunning = true;
     connectWS();
     showControls();
@@ -290,6 +324,7 @@ async function startCamera() {
     btnStart.disabled = false;
 
   } catch (err) {
+    console.error('Camera init error:', err);
     btnStart.disabled = false;
     btnStart.querySelector('.btn-label').textContent = 'Start Camera';
     toast(`✕ Camera error: ${err.message}`, 5000);
