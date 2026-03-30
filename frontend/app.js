@@ -335,7 +335,7 @@ function onHolisticResults(results) {
   }
 
   if (ws?.readyState !== WebSocket.OPEN) return;
-
+  console.log("Sending frame, count=", frameCount);
   frameCount++;
 
   if (frameCount >= SEND_EVERY_N) {
