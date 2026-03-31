@@ -9,18 +9,20 @@ const HOLISTIC_UTILS  = "https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.
 const DRAWING_UTILS   = "https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1675466124/drawing_utils.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const CLIENT_ID        = Math.random().toString(36).slice(2);
-const CONTROLS_TIMEOUT = 3000;
-const SEND_EVERY_N     = 15;     // trigger predict every N accepted frames (~0.5s at 30fps)
-const WS_RECONNECT_BASE = 1000;  // base ms for exponential backoff
-const WS_RECONNECT_MAX  = 16000; // cap at 16s
+const CLIENT_ID         = Math.random().toString(36).slice(2);
+const CONTROLS_TIMEOUT  = 3000;
+const SEND_EVERY_N      = 15;      // trigger predict every N frames (~0.5s at 30fps)
+const WS_RECONNECT_BASE = 1000;
+const WS_RECONNECT_MAX  = 16000;
 
-/** Pre-serialized — avoids JSON.stringify on every predict trigger */
+/** Pre-serialized string — avoids JSON.stringify on every predict trigger */
 const PREDICT_MSG = '{"action":"predict"}';
 
-/** Reuse frozen style objects so MediaPipe drawing never allocates per frame */
+/** Reuse frozen style objects — MediaPipe drawing never allocates per frame */
 const DRAW_CONN = Object.freeze({ color: 'rgba(41,196,154,.35)', lineWidth: 1.5 });
 const DRAW_LM   = Object.freeze({ color: 'rgba(41,196,154,.8)',  lineWidth: 1, radius: 3 });
+
+const CONFETTI_COLORS = ['#29c49a', '#4dd9b4', '#1a9e7c', '#a8f0dc', '#e8e8ec'];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -32,8 +34,8 @@ function getWsBase() {
   return getApiBase().replace(/^https/, 'wss').replace(/^http/, 'ws');
 }
 
-/** Safe ws.send — only sends when socket is open */
-function wsSend(ws, payload) {
+/** Safe send — only fires when socket is OPEN */
+function wsSend(payload) {
   if (ws?.readyState === WebSocket.OPEN) ws.send(payload);
 }
 
@@ -69,29 +71,27 @@ const pauseThresh      = $('pauseThresh');
 const pauseThreshVal   = $('pauseThreshVal');
 const toastEl          = $('toast');
 const celebCanvas      = $('celebrationCanvas');
-const gateLabel        = $('gateLabel');     // optional: shows gate reason
-const marginLabel      = $('marginLabel');   // optional: shows margin value
-const top5Panel        = $('top5Panel');     // optional: shows top-5 predictions
-const suggestionsBar   = $('suggestionsBar'); // optional: shows autocomplete chips
+const gateLabel        = $('gateLabel');      // optional: gate reason
+const marginLabel      = $('marginLabel');    // optional: margin value
+const top5Panel        = $('top5Panel');      // optional: top-5 panel
+const suggestionsBar   = $('suggestionsBar'); // optional: autocomplete
 
-let celebCtx        = null;
-let ws              = null;
-let holistic        = null;
-let holisticCamera  = null;
-let isRunning       = false;
-let lastSentence    = '';
-let sentenceTotal   = 0;
-let handVisible     = false;
-let lastSignText    = '';
-let lastChipSigns   = [];
-let controlsTimer   = null;
-let frameCount      = 0;
-let lastVideoW      = 0;
-let lastVideoH      = 0;
+let celebCtx         = null;
+let ws               = null;
+let holistic         = null;
+let holisticCamera   = null;
+let isRunning        = false;
+let lastSentence     = '';
+let sentenceTotal    = 0;
+let handVisible      = false;
+let lastSignText     = '';
+let lastChipSigns    = [];
+let controlsTimer    = null;
+let frameCount       = 0;
+let lastVideoW       = 0;
+let lastVideoH       = 0;
 let wsReconnectDelay = WS_RECONNECT_BASE;
-
-/** Cached from slider — avoids DOM read on every WS message */
-let hudConfThresh = 0.5;
+let hudConfThresh    = 0.5; // cached from slider — avoids DOM read per WS message
 
 // ── Script loader ─────────────────────────────────────────────────────────────
 function loadScript(src) {
@@ -118,7 +118,7 @@ function addRipple(btn, e) {
   const size = Math.max(rect.width, rect.height);
   const r    = document.createElement('span');
   r.className = 'ripple';
-  r.style.cssText = `width:${size}px;height:${size}px;left:${(e.clientX - rect.left) - size / 2}px;top:${(e.clientY - rect.top) - size / 2}px`;
+  r.style.cssText = `width:${size}px;height:${size}px;left:${(e.clientX - rect.left) - size/2}px;top:${(e.clientY - rect.top) - size/2}px`;
   btn.appendChild(r);
   r.addEventListener('animationend', () => r.remove(), { once: true });
 }
@@ -180,23 +180,22 @@ function connectWS() {
 
   ws.onopen = () => {
     setStatus('ok', 'Live');
-    wsReconnectDelay = WS_RECONNECT_BASE; // reset backoff on success
+    wsReconnectDelay = WS_RECONNECT_BASE;
+    // Sync confidence slider to backend on reconnect
+    wsSend(JSON.stringify({ action: 'set_threshold', confidence: hudConfThresh }));
   };
 
   ws.onmessage = (e) => {
-    // BUG FIX: parse inside try/catch — malformed JSON must not crash the handler
     let msg;
     try { msg = JSON.parse(e.data); }
     catch { console.warn('[WS] Bad JSON:', e.data); return; }
 
-    const t = msg.type;
-
-    if (t === 'prediction') {
+    if (msg.type === 'prediction') {
       updateHUD(msg.sign, msg.confidence);
       updateChips(msg.buffer || []);
-      updateDiagHUD(msg);           // gate label, margin, top5, suggestions
+      updateDiagHUD(msg);
     }
-    if (t === 'sentence') {
+    if (msg.type === 'sentence') {
       addSentence(msg.sentence, msg.gloss);
       updateChips([]);
     }
@@ -206,47 +205,39 @@ function connectWS() {
 
   ws.onclose = () => {
     setStatus('warn', 'Reconnecting…');
-    // Exponential backoff — avoids hammering a down server
     setTimeout(connectWS, wsReconnectDelay);
     wsReconnectDelay = Math.min(wsReconnectDelay * 2, WS_RECONNECT_MAX);
   };
 }
 
-// ── Diagnostic HUD (gate / margin / top5 / suggestions) ──────────────────────
+// ── Diagnostic HUD ────────────────────────────────────────────────────────────
 function updateDiagHUD(msg) {
-  // Gate reason label
   if (gateLabel) {
-    gateLabel.textContent = msg.gate
-      ? `⛔ ${msg.gate.replace('_', ' ')}`
-      : '';
+    gateLabel.textContent = msg.gate ? `⛔ ${msg.gate.replace(/_/g, ' ')}` : '';
   }
-
-  // Margin value
   if (marginLabel && msg.margin != null) {
     marginLabel.textContent = `margin: ${(msg.margin * 100).toFixed(1)}%`;
   }
-
-  // Top-5 predictions panel
   if (top5Panel && Array.isArray(msg.top5) && msg.top5.length) {
     top5Panel.innerHTML = msg.top5
       .map(p => `<span class="t5-chip" title="${(p.confidence * 100).toFixed(1)}%">
-          ${p.sign} <em>${(p.confidence * 100).toFixed(0)}%</em></span>`)
+        ${p.sign} <em>${(p.confidence * 100).toFixed(0)}%</em></span>`)
       .join('');
   }
-
-  // Autocomplete suggestions bar
-  if (suggestionsBar && Array.isArray(msg.suggestions) && msg.suggestions.length) {
-    suggestionsBar.innerHTML = msg.suggestions
-      .map(s => `<button class="sugg-chip" data-sign="${s.sign}">${s.sign}</button>`)
-      .join('');
-    suggestionsBar.querySelectorAll('.sugg-chip').forEach(btn => {
-      btn.addEventListener('click', () => {
-        wsSend(ws, JSON.stringify({ action: 'accept_suggestion', sign: btn.dataset.sign }));
-        toast(`✓ Added: ${btn.dataset.sign}`);
-      }, { once: true });
-    });
-  } else if (suggestionsBar) {
-    suggestionsBar.innerHTML = '';
+  if (suggestionsBar) {
+    if (Array.isArray(msg.suggestions) && msg.suggestions.length) {
+      suggestionsBar.innerHTML = msg.suggestions
+        .map(s => `<button class="sugg-chip" data-sign="${s.sign}">${s.sign}</button>`)
+        .join('');
+      suggestionsBar.querySelectorAll('.sugg-chip').forEach(btn => {
+        btn.addEventListener('click', () => {
+          wsSend(JSON.stringify({ action: 'accept_suggestion', sign: btn.dataset.sign }));
+          toast(`✓ Added: ${btn.dataset.sign}`);
+        }, { once: true });
+      });
+    } else {
+      suggestionsBar.innerHTML = '';
+    }
   }
 }
 
@@ -275,26 +266,20 @@ async function initHolistic() {
   toast('Ready — show your hands ✋');
 }
 
-// ── Pack landmarks for backend ────────────────────────────────────────────────
+// ── Pack landmarks ────────────────────────────────────────────────────────────
 /**
- * PERF: For frame messages we only send hands + pose (~96 points).
- * Face (468 points) is included only on predict messages because the backend
- * nose-centres using face landmark #1, but omitting face from frame messages
- * cuts per-frame payload by ~70%.
+ * FIX: Always include ALL four landmark groups on every frame.
  *
- * NOTE: The backend fills missing groups with zeros via GROUP_IDX, so
- * omitting faceLandmarks from frame messages is safe.
+ * Previous version omitted faceLandmarks from regular frames to save bandwidth,
+ * but the backend nose-centres every frame using face landmark #1.
+ * Without face, nose = (0,0,0) so no centring happened on 14 out of every 15
+ * frames — producing an inconsistent feature window going into the model.
+ *
+ * Bandwidth cost: face adds ~468 × 3 floats ≈ 11KB/frame at 30fps = ~330KB/s.
+ * This is acceptable on a local WebSocket. If bandwidth becomes a concern,
+ * implement centring in the frontend instead and strip face before sending.
  */
-function packFrameLandmarks(res) {
-  const o = {};
-  if (res.poseLandmarks)      o.poseLandmarks      = res.poseLandmarks;
-  if (res.leftHandLandmarks)  o.leftHandLandmarks  = res.leftHandLandmarks;
-  if (res.rightHandLandmarks) o.rightHandLandmarks = res.rightHandLandmarks;
-  return o;
-}
-
-function packPredictLandmarks(res) {
-  // Full frame including face — used when predict is triggered
+function packLandmarks(res) {
   const o = {};
   if (res.faceLandmarks)      o.faceLandmarks      = res.faceLandmarks;
   if (res.poseLandmarks)      o.poseLandmarks      = res.poseLandmarks;
@@ -316,7 +301,6 @@ function onHolisticResults(results) {
   if (vw <= 0 || vh <= 0) return;
   ctx.clearRect(0, 0, vw, vh);
 
-  // Hand presence ring
   const hasHand = (results.leftHandLandmarks?.length > 0)
                || (results.rightHandLandmarks?.length > 0);
   if (hasHand !== handVisible) {
@@ -324,7 +308,6 @@ function onHolisticResults(results) {
     handRing?.classList.toggle('active', hasHand);
   }
 
-  // Draw landmarks
   if (results.leftHandLandmarks) {
     window.drawConnectors(ctx, results.leftHandLandmarks, window.HAND_CONNECTIONS, DRAW_CONN);
     window.drawLandmarks(ctx,  results.leftHandLandmarks, DRAW_LM);
@@ -335,23 +318,15 @@ function onHolisticResults(results) {
   }
 
   if (ws?.readyState !== WebSocket.OPEN) return;
-  console.log("Sending frame, count=", frameCount);
+
   frameCount++;
 
+  // Send frame with ALL landmarks (face included) every frame
+  ws.send(JSON.stringify({ action: 'frame', landmarks: packLandmarks(results) }));
+
   if (frameCount >= SEND_EVERY_N) {
-    // On predict frame: send full landmarks (including face) then trigger predict
-    ws.send(JSON.stringify({
-      action: 'frame',
-      landmarks: packPredictLandmarks(results),
-    }));
     ws.send(PREDICT_MSG);
     frameCount = 0;
-  } else {
-    // Regular frame: send hands + pose only (~70% less payload)
-    ws.send(JSON.stringify({
-      action: 'frame',
-      landmarks: packFrameLandmarks(results),
-    }));
   }
 }
 
@@ -396,8 +371,7 @@ async function startCamera() {
 function updateHUD(sign, conf) {
   const valid   = !!(sign && conf >= hudConfThresh);
   const newSign = valid && sign !== lastSignText;
-
-  lastSignText = valid ? sign : '';
+  lastSignText  = valid ? sign : '';
 
   if (signWord) {
     signWord.textContent = valid ? sign : '';
@@ -407,10 +381,8 @@ function updateHUD(sign, conf) {
 }
 
 function updateChips(signs) {
-  if (
-    signs.length === lastChipSigns.length &&
-    signs.every((s, i) => s === lastChipSigns[i])
-  ) return; // no change — skip DOM write
+  if (signs.length === lastChipSigns.length &&
+      signs.every((s, i) => s === lastChipSigns[i])) return;
   lastChipSigns = [...signs];
   if (!signs.length) { if (sentenceChips) sentenceChips.innerHTML = ''; return; }
   if (sentenceChips) sentenceChips.innerHTML = signs
@@ -452,17 +424,13 @@ function speak(text) {
   if (!text || !window.speechSynthesis) return;
   speechSynthesis.cancel();
   const utt = new SpeechSynthesisUtterance(text);
-  utt.rate  = 0.95;
-  utt.pitch = 1.0;
-  const nat = speechSynthesis.getVoices()
-    .find(v => /natural|premium|enhanced/i.test(v.name));
+  utt.rate = 0.95; utt.pitch = 1.0;
+  const nat = speechSynthesis.getVoices().find(v => /natural|premium|enhanced/i.test(v.name));
   if (nat) utt.voice = nat;
   speechSynthesis.speak(utt);
 }
 
 // ── Celebration ───────────────────────────────────────────────────────────────
-const CONFETTI_COLORS = ['#29c49a', '#4dd9b4', '#1a9e7c', '#a8f0dc', '#e8e8ec'];
-
 function celebrate() {
   if (!celebCanvas) return;
   if (!celebCtx) celebCtx = celebCanvas.getContext('2d');
@@ -471,16 +439,11 @@ function celebrate() {
   celebCanvas.style.display = 'block';
 
   const pieces = Array.from({ length: 60 }, () => ({
-    x:  Math.random() * celebCanvas.width,
-    y:  -10,
-    vx: (Math.random() - .5) * 3.5,
-    vy: Math.random() * 4 + 2,
-    rot: Math.random() * 360,
-    vr: (Math.random() - .5) * 6,
-    w:  Math.random() * 6 + 3,
-    h:  Math.random() * 3 + 2,
-    c:  CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
-    a:  1,
+    x: Math.random() * celebCanvas.width, y: -10,
+    vx: (Math.random() - .5) * 3.5, vy: Math.random() * 4 + 2,
+    rot: Math.random() * 360, vr: (Math.random() - .5) * 6,
+    w: Math.random() * 6 + 3, h: Math.random() * 3 + 2,
+    c: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)], a: 1,
   }));
 
   let frame = 0;
@@ -523,7 +486,7 @@ function clearAll() {
 
 // ── Flush ─────────────────────────────────────────────────────────────────────
 function flush() {
-  wsSend(ws, JSON.stringify({ action: 'flush' }));
+  wsSend(JSON.stringify({ action: 'flush' }));
   toast('Sentence flushed');
 }
 
@@ -551,14 +514,13 @@ historyPanel?.addEventListener('click', e => {
 confThresh?.addEventListener('input', () => {
   hudConfThresh = parseInt(confThresh.value, 10) / 100;
   if (confThreshVal) confThreshVal.textContent = `${confThresh.value}%`;
-  // BUG FIX: sync confidence threshold to backend so gate matches UI
-  wsSend(ws, JSON.stringify({ action: 'set_threshold', confidence: hudConfThresh }));
+  wsSend(JSON.stringify({ action: 'set_threshold', confidence: hudConfThresh }));
 });
 
 pauseThresh?.addEventListener('input', () => {
   const val = (parseInt(pauseThresh.value) / 10).toFixed(1);
   if (pauseThreshVal) pauseThreshVal.textContent = `${val}s`;
-  wsSend(ws, JSON.stringify({ action: 'set_pause', value: parseFloat(val) }));
+  wsSend(JSON.stringify({ action: 'set_pause', value: parseFloat(val) }));
 });
 
 // ── Button wiring ─────────────────────────────────────────────────────────────
