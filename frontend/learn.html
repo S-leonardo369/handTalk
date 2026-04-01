@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>handTalk Learn — ASL Practice</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="learn.css">
+</head>
+<body>
+
+<!-- ── Top Nav ──────────────────────────────────────────────────────────── -->
+<nav class="ht-nav">
+  <a href="index.html" class="ht-logo">✋ hand<span>Talk</span></a>
+  <a href="index.html" class="nav-link">Translate</a>
+  <a href="learn.html" class="nav-link active">Learn</a>
+</nav>
+
+<!-- ── Page shell ───────────────────────────────────────────────────────── -->
+<div class="learn-page">
+
+  <!-- Mode tabs -->
+  <div class="mode-tabs">
+    <button class="mode-tab active" data-tab="library">Library</button>
+    <button class="mode-tab"        data-tab="practice">Practice</button>
+    <button class="mode-tab"        data-tab="quiz">Quiz</button>
+  </div>
+
+  <!-- ── LIBRARY PANEL ──────────────────────────────────────────────────── -->
+  <div class="mode-panel active" id="panel-library">
+    <div class="lib-toolbar">
+      <div class="lib-search-wrap">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input class="lib-search" id="libSearch" type="search" placeholder="Search signs…" autocomplete="off">
+      </div>
+      <select class="cat-select" id="catFilter">
+        <option value="all">All categories</option>
+        <option value="family">Family</option>
+        <option value="feelings">Feelings</option>
+        <option value="actions">Actions</option>
+        <option value="objects">Objects</option>
+        <option value="greetings">Greetings</option>
+        <option value="time">Time</option>
+        <option value="other">Other</option>
+      </select>
+      <span class="lib-stats" id="libStats"></span>
+    </div>
+    <div class="sign-grid" id="signGrid"></div>
+  </div>
+
+  <!-- ── PRACTICE PANEL ─────────────────────────────────────────────────── -->
+  <div class="mode-panel" id="panel-practice">
+    <div class="practice-shell">
+
+      <!-- Sign picker (shown before session) -->
+      <div class="sign-picker" id="signPicker">
+        <div class="sign-picker-head">
+          <div>
+            <h2>Practice Mode</h2>
+            <p>Choose a sign to practice or start a full session</p>
+          </div>
+        </div>
+        <div class="picker-actions">
+          <button class="btn-primary" id="btnStartSession" style="flex:none;padding:9px 20px">
+            Start Session (10 signs)
+          </button>
+          <button class="btn-secondary" id="btnStartWeak" style="display:none">
+            Practice Weak Signs
+          </button>
+        </div>
+        <!-- Reuses the same grid as Library, but clicking starts practice -->
+        <div class="sign-grid" id="practicePickerGrid"></div>
+      </div>
+
+      <!-- Active session (hidden until started) -->
+      <div class="practice-session" id="practiceSession" style="position:relative">
+
+        <div class="session-header">
+          <button class="session-back" id="btnSessionBack">
+            ← Back
+          </button>
+          <div class="session-target-label">
+            Sign: <span class="session-target-word" id="sessionTargetWord">—</span>
+          </div>
+          <span class="session-progress" id="sessionProgress">0 / 0</span>
+        </div>
+
+        <div class="session-prog-bar">
+          <div class="session-prog-fill" id="sessionProgFill" style="width:0%"></div>
+        </div>
+
+        <div class="practice-arena">
+          <!-- Demo video -->
+          <div class="arena-video">
+            <div class="arena-video-ratio"></div>
+            <span class="arena-label">Demo</span>
+            <div id="arenaVideoSlot" style="position:absolute;inset:0"></div>
+          </div>
+
+          <!-- Live camera -->
+          <div class="arena-camera" id="arenaCamera">
+            <div class="arena-camera-ratio"></div>
+            <span class="arena-label">You</span>
+            <div class="cam-placeholder" id="practiceCamPlaceholder">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+              <span>Starting camera…</span>
+            </div>
+            <video id="practiceVideo" autoplay muted playsinline style="display:none"></video>
+            <canvas id="practiceCanvas" style="display:none"></canvas>
+            <div class="progress-ring-wrap">
+              <svg class="progress-ring-svg" viewBox="0 0 80 80">
+                <circle class="ring-bg"   cx="40" cy="40" r="35"/>
+                <circle class="ring-fill" id="practiceRing" cx="40" cy="40" r="35"/>
+              </svg>
+            </div>
+            <div class="cam-status" id="practiceCamStatus">Initialising…</div>
+          </div>
+        </div>
+
+        <div class="practice-footer">
+          <div class="conf-row">
+            <span class="conf-label">Confidence</span>
+            <div class="conf-bar"><div class="conf-bar-fill" id="practiceConfFill"></div></div>
+            <span class="conf-val" id="practiceConfVal">—</span>
+          </div>
+          <div class="practice-actions">
+            <button class="btn-primary"   id="btnGotIt" disabled>✓ Got it — Next</button>
+            <button class="btn-secondary" id="btnSkipSign">Skip</button>
+          </div>
+        </div>
+
+        <!-- Session complete overlay -->
+        <div class="session-complete" id="sessionComplete">
+          <div class="complete-icon">🎉</div>
+          <div class="complete-title">Session Done!</div>
+          <div class="complete-results" id="completeResults"></div>
+          <div class="complete-actions">
+            <button class="btn-primary"   id="btnPracticeAgain">Practice Weak Signs</button>
+            <button class="btn-secondary" id="btnGoQuiz">Go to Quiz →</button>
+            <button class="btn-secondary" id="btnBackLibrary">Library</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ── QUIZ PANEL ─────────────────────────────────────────────────────── -->
+  <div class="mode-panel" id="panel-quiz">
+    <div class="quiz-shell">
+
+      <!-- Quiz start screen -->
+      <div class="quiz-start" id="quizStart">
+        <h2>Quiz Mode</h2>
+        <p>Sign the word shown — no video hints. You have 10 seconds per sign.</p>
+        <div class="quiz-options">
+          <button class="quiz-opt selected" data-count="5">5 signs</button>
+          <button class="quiz-opt" data-count="10">10 signs</button>
+          <button class="quiz-opt" data-count="20">20 signs</button>
+        </div>
+        <button class="btn-primary" id="btnStartQuiz" style="padding:12px 32px;font-size:14px">
+          Start Quiz
+        </button>
+      </div>
+
+      <!-- Active quiz -->
+      <div class="quiz-active" id="quizActive">
+        <div class="quiz-head">
+          <span class="quiz-progress-text" id="quizProgressText">1 / 10</span>
+          <span class="quiz-timer-display" id="quizTimerDisplay">10</span>
+        </div>
+        <div class="timer-bar">
+          <div class="timer-bar-fill" id="timerBarFill" style="width:100%"></div>
+        </div>
+        <div class="quiz-prompt">
+          <span class="quiz-prompt-label">Sign this word:</span>
+          <span class="quiz-target-word" id="quizTargetWord">—</span>
+        </div>
+        <div class="quiz-camera-wrap">
+          <div class="quiz-camera-ratio"></div>
+          <div class="cam-placeholder" id="quizCamPlaceholder">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+            <span>Starting camera…</span>
+          </div>
+          <video  id="quizVideo"  autoplay muted playsinline style="display:none"></video>
+          <canvas id="quizCanvas" style="display:none"></canvas>
+        </div>
+        <div class="quiz-feedback">
+          <span class="quiz-model-sees" id="quizModelSees">Model sees: —</span>
+          <button class="quiz-skip" id="btnQuizSkip">Skip</button>
+        </div>
+      </div>
+
+      <!-- Quiz results -->
+      <div class="quiz-results" id="quizResults">
+        <div class="quiz-score-ring">
+          <svg viewBox="0 0 100 100">
+            <circle class="score-ring-bg"   cx="50" cy="50" r="45"/>
+            <circle class="score-ring-fill" id="scoreRingFill" cx="50" cy="50" r="45"/>
+          </svg>
+          <div class="quiz-score-text">
+            <span class="score-num" id="scoreNum">—</span>
+            <span class="score-den" id="scoreDen">/ 10</span>
+          </div>
+        </div>
+        <div class="quiz-meta">
+          <span>Streak <strong id="quizStreakDisplay">🔥 0</strong></span>
+          <span>Best <strong id="quizBestTime">—</strong></span>
+        </div>
+        <div class="results-table" id="resultsTable"></div>
+        <div class="results-actions">
+          <button class="btn-primary"   id="btnQuizAgain">Try Again</button>
+          <button class="btn-secondary" id="btnQuizWeak">Practice Weak Signs</button>
+          <button class="btn-secondary" id="btnQuizNew">New Quiz</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Sign modal ──────────────────────────────────────────────────────── -->
+<div class="modal-backdrop hidden" id="signModal">
+  <div class="sign-modal">
+    <div class="modal-head">
+      <span class="modal-sign-name" id="modalSignName">—</span>
+      <button class="modal-close" id="modalClose">✕</button>
+    </div>
+    <div class="modal-video">
+      <div id="modalVideoSlot"></div>
+      <div class="modal-no-video hidden" id="modalNoVideo">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+        <span>No video available for this sign</span>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-primary"   id="modalPractice">Practice this sign →</button>
+      <button class="btn-secondary" id="modalClose2">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toast ──────────────────────────────────────────────────────────── -->
+<div id="lrn-toast"></div>
+
+<script src="learn.js"></script>
+</body>
+</html>
