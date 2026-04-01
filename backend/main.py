@@ -10,49 +10,45 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="ASL Translator API")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-# ── Gates ─────────────────────────────────────────────────────────────────────
+# ── Tuned for hoyso48 ───────────────────────────────────────────────────────
 GATES = {
-    "confidence":  0.22,
-    "margin":      0.04,
+    "confidence": 0.22,
+    "margin":     0.04,
     "consecutive": 2,
-    "motion":      0.012,
+    "motion":     0.012,
 }
 MAX_FRAMES = 80
 
-# ── Globals (no type annotations on assignment line) ─────────────────────────
+# ── Globals ─────────────────────────────────────────────────────────────────
 TF_MODEL = None
-ORD2SIGN = {}      # int -> sign name
-SIGN2ID  = {}      # sign name (lowercase) -> int
-ROWS_PER_FRAME = None
-FORMAT_DF = None
-MODEL_ERROR = None
+ORD2SIGN:    dict[int, str] = {}
+SIGN2ID:     dict[str, int] = {}          # ← fixed type
+ASL_VIDREF:  dict[int, str] = {}          # sign_id → asl_vidref (SignASL embed ID)
+ROWS_PER_FRAME: int | None = None
+FORMAT_DF: pd.DataFrame | None = None
+MODEL_ERROR: str | None = None
 
 _GROUP_TO_KEY = {
-    "face":       "faceLandmarks",
-    "pose":       "poseLandmarks",
-    "left_hand":  "leftHandLandmarks",
+    "face": "faceLandmarks",
+    "pose": "poseLandmarks",
+    "left_hand": "leftHandLandmarks",
     "right_hand": "rightHandLandmarks",
 }
 
 
-def load_model() -> None:
-    global TF_MODEL, ORD2SIGN, SIGN2ID, ROWS_PER_FRAME, FORMAT_DF, MODEL_ERROR
-
-    base        = Path(__file__).resolve().parent
-    model_path  = base / "model" / "vocab_model_hoyso48.tflite"
-    map_path    = base / "model" / "vocab_map.json"
+def load_model():
+    global TF_MODEL, ORD2SIGN, SIGN2ID, ASL_VIDREF, ROWS_PER_FRAME, FORMAT_DF, MODEL_ERROR
+    base = Path(__file__).resolve().parent
+    model_path = base / "model" / "vocab_model_hoyso48.tflite"
+    map_path   = base / "model" / "vocab_map.json"
     format_path = base / "model" / "vocab_format.parquet"
 
     TF_MODEL = None
     ORD2SIGN = {}
     SIGN2ID  = {}
+    ASL_VIDREF = {}
     ROWS_PER_FRAME = None
     FORMAT_DF = None
     MODEL_ERROR = None
@@ -62,34 +58,29 @@ def load_model() -> None:
         print(f"[ERROR] {MODEL_ERROR}")
         return
 
-    # TFLite
     try:
-        try:
-            from tflite_runtime.interpreter import Interpreter
-        except ImportError:
-            from tensorflow.lite.python.interpreter import Interpreter
-        interp   = Interpreter(model_path=str(model_path), num_threads=8)
+        from tensorflow.lite.python.interpreter import Interpreter
+        interp = Interpreter(model_path=str(model_path), num_threads=8)
         TF_MODEL = interp.get_signature_runner("serving_default")
-        print(f"[OK] Model loaded — {model_path.name}")
+        print(f"[OK] Model loaded — vocab_model_hoyso48.tflite")
     except Exception as e:
         MODEL_ERROR = str(e)
         print(f"[ERROR] Model load: {e}")
         return
 
-    # Sign map
     try:
         with open(map_path, encoding="utf-8") as f:
             raw = json.load(f)
-        ORD2SIGN = {int(k): v["sign"] for k, v in raw.items()}
-        SIGN2ID  = {v["sign"].lower(): int(k) for k, v in raw.items()}
+        ORD2SIGN   = {int(k): v["sign"]                    for k, v in raw.items()}
+        SIGN2ID    = {v["sign"].lower(): int(k)            for k, v in raw.items()}
+        ASL_VIDREF = {int(k): v.get("asl_vidref", "")     for k, v in raw.items()}
         print(f"[OK] Sign map — {len(ORD2SIGN)} signs")
-        print(f"[OK] Sample: {list(ORD2SIGN.values())[:10]}")
     except Exception as e:
         MODEL_ERROR = str(e)
         print(f"[ERROR] Sign map: {e}")
         return
-
-    # Format parquet
+    print("Does 'hello' exist in vocab?", "hello" in SIGN2ID)
+    print("Sample signs:", list(ORD2SIGN.values())[:20])
     try:
         FORMAT_DF = pd.read_parquet(format_path)
         ROWS_PER_FRAME = len(FORMAT_DF)
@@ -102,7 +93,7 @@ def load_model() -> None:
 load_model()
 
 
-# ── Exact preprocessing (same as original repo) ───────────────────────────────
+# ── Exact original preprocessing from asl-practice-app ──────────────────────
 def create_vocab_framedata_df(landmarks_dict: dict) -> np.ndarray | None:
     if FORMAT_DF is None or TF_MODEL is None or ROWS_PER_FRAME is None:
         return None
@@ -128,16 +119,18 @@ def create_vocab_framedata_df(landmarks_dict: dict) -> np.ndarray | None:
     merged = FORMAT_DF.merge(df, on=["type", "landmark_index"], how="left")
     merged[["x", "y", "z"]] = merged[["x", "y", "z"]].fillna(0.0)
 
+    # Nose centering
     nose_row = merged[(merged["type"] == "face") & (merged["landmark_index"] == 1)]
     if not nose_row.empty:
         nose = nose_row[["x", "y", "z"]].values[0]
         merged[["x", "y", "z"]] -= nose
 
+    # Reshape with explicit guard (fixes Pylance error)
     array = merged[["x", "y", "z"]].values.astype(np.float32)
     return array.reshape(1, ROWS_PER_FRAME, 3)
 
 
-def infer_probs(seq: np.ndarray) -> np.ndarray | None:
+def infer_probs(seq: np.ndarray):
     if TF_MODEL is None:
         return None
     try:
@@ -173,8 +166,7 @@ class SignBuffer:
         if self.last_sign_time and now - self.last_sign_time > self.pause_threshold and self.signs:
             flushed = list(self.signs)
             self.signs = []
-            self._pending = None
-            self._count = 0
+            self._pending = self._count = 0
             return flushed
         if sign == self._pending:
             self._count += 1
@@ -192,8 +184,7 @@ class SignBuffer:
         result = list(self.signs)
         self.signs = []
         self.last_sign_time = None
-        self._pending = None
-        self._count = 0
+        self._pending = self._count = 0
         return result
 
 
@@ -206,33 +197,30 @@ def gloss_to_sentence(signs: list[str]):
     return " ".join(deduped).capitalize() + "."
 
 
-# ── Endpoints ────────────────────────────────────────────────────────────────
 @app.get("/status")
 def status():
-    return {
-        "model_loaded": TF_MODEL is not None,
-        "model": "vocab_model_hoyso48.tflite",
-        "num_signs": len(ORD2SIGN),
-        "error": MODEL_ERROR,
-    }
+    return {"model_loaded": TF_MODEL is not None, "model": "vocab_model_hoyso48.tflite", "num_signs": len(ORD2SIGN)}
+
+
+connected: dict[str, dict] = {}
 
 
 @app.get("/vocab")
-def vocab():
-    """Required by learn.html / learn.js"""
+def vocab_list():
+    """Full vocabulary with SignASL video IDs for the Learn page."""
     return {
         "signs": [
-            {"sign_id": sid, "sign": name, "yt_embedId": ""}
+            {
+                "sign_id":    sid,
+                "sign":       name,
+                "asl_vidref": ASL_VIDREF.get(sid, ""),
+            }
             for sid, name in sorted(ORD2SIGN.items(), key=lambda x: x[1].lower())
         ]
     }
 
-
-# ── WebSocket (your latest version — unchanged) ──────────────────────────────
-connected: dict[str, dict] = {}
-
 @app.websocket("/ws/{client_id}")
-async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
+async def websocket_endpoint(websocket: WebSocket, client_id: str):
     await websocket.accept()
     state = {
         "frames": deque(maxlen=MAX_FRAMES),
@@ -241,7 +229,6 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
         "motion_thr": GATES["motion"],
     }
     connected[client_id] = state
-    print(f"[WS] {client_id} connected")
 
     try:
         while True:
@@ -249,8 +236,6 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
             action = data.get("action")
 
             if action == "frame":
-                if TF_MODEL is None or ROWS_PER_FRAME is None:
-                    continue
                 lm = data.get("landmarks", {})
                 lh = lm.get("leftHandLandmarks") or []
                 rh = lm.get("rightHandLandmarks") or []
@@ -319,4 +304,3 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
 
     except WebSocketDisconnect:
         connected.pop(client_id, None)
-        print(f"[WS] {client_id} disconnected")

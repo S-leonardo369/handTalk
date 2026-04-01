@@ -76,7 +76,7 @@ function markWeak(p, sign) {
 let progress = loadProgress();
 
 // ── Vocabulary ────────────────────────────────────────────────────────────────
-let VOCAB = [];  // [{sign_id, sign, yt_embedId}]
+let VOCAB = [];  // [{sign_id, sign, asl_vidref}]
 
 async function fetchVocab() {
   try {
@@ -151,14 +151,14 @@ function renderLibrary() {
 
   signGrid.innerHTML = items.map(e => `
     <div class="sign-card${e.mastered ? ' mastered' : e.weak ? ' weak' : ''}"
-         data-sign="${e.sign}" data-yt="${e.yt_embedId || ''}">
+         data-sign="${e.sign}" data-vidref="${e.asl_vidref || ''}">
       <span class="sign-card-badge"></span>
       <div class="sign-card-thumb">${e.sign.slice(0,2).toUpperCase()}</div>
       <div class="sign-card-name">${e.sign}</div>
     </div>`).join('');
 
   signGrid.querySelectorAll('.sign-card').forEach(card => {
-    card.addEventListener('click', () => openSignModal(card.dataset.sign, card.dataset.yt));
+    card.addEventListener('click', () => openSignModal(card.dataset.sign, card.dataset.vidref));
   });
 }
 
@@ -172,17 +172,20 @@ const modalVideoSlot= document.getElementById('modalVideoSlot');
 const modalNoVideo  = document.getElementById('modalNoVideo');
 let   modalCurrentSign = null;
 
-function openSignModal(sign, ytId) {
-  modalCurrentSign    = sign;
+function openSignModal(sign, aslId) {
+  modalCurrentSign = sign;
   modalSignName.textContent = sign.toUpperCase();
   modal.classList.remove('hidden');
 
-  if (ytId) {
+  if (aslId) {
     modalNoVideo.classList.add('hidden');
-    modalVideoSlot.innerHTML = `<iframe
-      style="position:absolute;inset:0;width:100%;height:100%;border:none"
-      src="https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&rel=0"
-      allow="autoplay; encrypted-media" allowfullscreen></iframe>`;
+    modalVideoSlot.innerHTML = `
+      <blockquote class="signasldata-embed" data-vidref="${aslId}"
+        style="position:absolute;inset:0;margin:0;padding:0;width:100%;height:100%;border:none">
+        <a href="https://www.signasl.org/sign/${sign}">Watch how to sign '${sign}' in ASL</a>
+      </blockquote>`;
+    // Tell SignASL widget to scan the new element
+    if (window.SignASLData && window.SignASLData.reload) window.SignASLData.reload();
   } else {
     modalNoVideo.classList.remove('hidden');
     modalVideoSlot.innerHTML = '';
@@ -191,7 +194,7 @@ function openSignModal(sign, ytId) {
 
 function closeModal() {
   modal.classList.add('hidden');
-  modalVideoSlot.innerHTML = '';  // stop video
+  modalVideoSlot.innerHTML = '';  // clear SignASL embed
 }
 
 document.getElementById('modalClose').addEventListener('click', closeModal);
@@ -459,13 +462,15 @@ function loadPracticeSign(sign) {
 
   // Load demo video
   const entry = VOCAB.find(e => e.sign === sign);
-  if (entry?.yt_embedId) {
-    arenaVideoSlot.innerHTML = `<iframe
-      style="position:absolute;inset:0;width:100%;height:100%;border:none"
-      src="https://www.youtube.com/embed/${entry.yt_embedId}?autoplay=1&mute=1&loop=1&rel=0"
-      allow="autoplay; encrypted-media" allowfullscreen></iframe>`;
+  if (entry?.asl_vidref) {
+    arenaVideoSlot.innerHTML = `
+      <blockquote class="signasldata-embed" data-vidref="${entry.asl_vidref}"
+        style="position:absolute;inset:0;margin:0;padding:0;width:100%;height:100%;border:none">
+        <a href="https://www.signasl.org/sign/${sign}">Watch how to sign '${sign}' in ASL</a>
+      </blockquote>`;
+    if (window.SignASLData && window.SignASLData.reload) window.SignASLData.reload();
   } else {
-    arenaVideoSlot.innerHTML = `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:13px">No demo video</div>`;
+    arenaVideoSlot.innerHTML = `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:13px">No demo video for this sign</div>`;
   }
 }
 
