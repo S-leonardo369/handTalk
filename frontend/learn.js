@@ -20,6 +20,21 @@ const HOLISTIC_SCRIPT = 'https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5.16
 const DRAW_CONN = Object.freeze({ color: 'rgba(41,196,154,.35)', lineWidth: 1.5 });
 const DRAW_LM   = Object.freeze({ color: 'rgba(41,196,154,.8)',  lineWidth: 1, radius: 3 });
 
+// ── SignASL widget re-initialiser ─────────────────────────────────────────────
+// widgets.js runs on first load and converts existing blockquotes.
+// For dynamically injected blockquotes, we re-execute the script.
+function reloadSignASLWidget() {
+  const WIDGET_SRC = 'https://embed.signasl.org/widgets.js';
+  const old = document.querySelector(`script[src="${WIDGET_SRC}"]`);
+  if (old) old.remove();
+  const s = document.createElement('script');
+  s.src = WIDGET_SRC;
+  s.charset = 'utf-8';
+  document.body.appendChild(s);
+}
+
+
+
 // ── Categories (static mapping — no backend change needed) ────────────────────
 const CATEGORIES = {
   family:   ['mom','dad','brother','sister','baby','family','grandma','grandpa','uncle','boy','girl','man','woman'],
@@ -177,18 +192,26 @@ function openSignModal(sign, aslId) {
   modalSignName.textContent = sign.toUpperCase();
   modal.classList.remove('hidden');
 
-  if (aslId) {
-    modalNoVideo.classList.add('hidden');
+  const entry = getVocabEntry(sign);           // ← safe & fast
+  const ytId  = entry && entry.yt_embedId ? entry.yt_embedId.trim() : "";
+
+  if (ytId) {
     modalVideoSlot.innerHTML = `
-      <blockquote class="signasldata-embed" data-vidref="${aslId}"
-        style="position:absolute;inset:0;margin:0;padding:0;width:100%;height:100%;border:none">
-        <a href="https://www.signasl.org/sign/${sign}">Watch how to sign '${sign}' in ASL</a>
-      </blockquote>`;
-    // Tell SignASL widget to scan the new element
-    if (window.SignASLData && window.SignASLData.reload) window.SignASLData.reload();
+      <div style="position:relative; width:100%; height:100%; background:#000;">
+        <iframe 
+          src="https://www.youtube.com/embed/${ytId}?rel=0&modestbranding=1&playsinline=1" 
+          style="position:absolute; top:0; left:0; width:100%; height:100%; border:none;"
+          title="ASL ${sign}" 
+          frameborder="0" 
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+          allowfullscreen>
+        </iframe>
+      </div>`;
   } else {
-    modalNoVideo.classList.remove('hidden');
-    modalVideoSlot.innerHTML = '';
+    modalVideoSlot.innerHTML = `
+      <div style="height:100%; display:flex; align-items:center; justify-content:center; color:#666; font-size:15px;">
+        No video yet
+      </div>`;
   }
 }
 
@@ -465,10 +488,10 @@ function loadPracticeSign(sign) {
   if (entry?.asl_vidref) {
     arenaVideoSlot.innerHTML = `
       <blockquote class="signasldata-embed" data-vidref="${entry.asl_vidref}"
-        style="position:absolute;inset:0;margin:0;padding:0;width:100%;height:100%;border:none">
-        <a href="https://www.signasl.org/sign/${sign}">Watch how to sign '${sign}' in ASL</a>
+        style="margin:0;width:100%;height:100%">
+        <a href="https://www.signasl.org/sign/${sign}">Watch '${sign}' in ASL</a>
       </blockquote>`;
-    if (window.SignASLData && window.SignASLData.reload) window.SignASLData.reload();
+    reloadSignASLWidget();
   } else {
     arenaVideoSlot.innerHTML = `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:13px">No demo video for this sign</div>`;
   }
@@ -690,8 +713,8 @@ function loadQuizSign(sign) {
   quiz.signStartTime = performance.now();
   quiz.timerSecs     = QUIZ_TIME;
 
-  quizTargetWord.textContent   = sign.toUpperCase();
-  quizProgressText.textContent = `${quiz.queueIndex + 1} / ${quiz.queue.length}`;
+  quizTargetWord.textContent = sign.toUpperCase();
+  quizTargetWord.style.fontSize = 'clamp(2.8rem, 8vw, 4.2rem)'; // slightly bigger on mobile
   quizModelSees.innerHTML      = 'Model sees: <strong>—</strong>';
   timerBarFill.style.width     = '100%';
   timerBarFill.className       = 'timer-bar-fill';
@@ -846,5 +869,30 @@ document.getElementById('btnQuizWeak').addEventListener('click', () => {
   }
 });
 
+// ── Performance Optimizations & Safe Initialization ────────────────────────
+
+// Debounce library search (prevents lag while typing)
+let searchTimeout;
+libSearch.addEventListener('input', () => {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(renderLibrary, 180);
+});
+
+// Safe vocabulary map (built only after data is loaded)
+let vocabMap = new Map();
+
+async function initializeApp() {
+  await fetchVocab();                    // wait for /vocab to return
+  VOCAB.forEach(entry => {
+    vocabMap.set(entry.sign.toLowerCase(), entry);
+  });
+  console.log(`✅ handTalk Learn initialized — ${VOCAB.length} signs loaded`);
+}
+
+// Use the map in openSignModal and loadPracticeSign for speed + safety
+function getVocabEntry(sign) {
+  return vocabMap.get(sign.toLowerCase()) || null;
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
-fetchVocab();
+initializeApp();

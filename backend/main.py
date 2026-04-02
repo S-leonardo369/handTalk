@@ -49,6 +49,7 @@ def load_model():
     ORD2SIGN = {}
     SIGN2ID  = {}
     ASL_VIDREF = {}
+    YT_EMBED: dict = {}
     ROWS_PER_FRAME = None
     FORMAT_DF = None
     MODEL_ERROR = None

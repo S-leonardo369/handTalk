@@ -237,6 +237,19 @@ html, body {
   position: relative; width: 100%; padding-top: 56.25%;
   background: #000;
 }
+/* Slot must fill the padding-box so the blockquote/widget has a sized container */
+#modalVideoSlot {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  overflow: hidden;
+}
+#modalVideoSlot .signasldata-embed,
+#modalVideoSlot blockquote {
+  margin: 0; padding: 0;
+  width: 100% !important;
+  height: 100% !important;
+  border: none;
+}
 .modal-video iframe {
   position: absolute; inset: 0; width: 100%; height: 100%;
   border: none;
@@ -602,4 +615,28 @@ html, body {
 .session-prog-fill {
   height: 100%; background: var(--accent);
   border-radius: 1px; transition: width .4s ease;
+}
+
+.sign-grid, .practice-arena {
+  will-change: transform;
+  -webkit-overflow-scrolling: touch;
+}
+
+.arena-video iframe,
+#modalVideoSlot iframe {
+  pointer-events: auto;
+}
+
+/* Quiz improvements - small & clean */
+.quiz-target-word {
+  font-size: clamp(2.8rem, 8vw, 4.2rem) !important;
+  line-height: 1.1;
+}
+
+.quiz-camera-wrap {
+  max-height: 260px; /* slightly bigger camera area */
+}
+
+.timer-bar-fill {
+  transition: width .8s linear; /* smoother timer */
 }
