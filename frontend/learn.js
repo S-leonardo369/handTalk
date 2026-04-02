@@ -483,17 +483,27 @@ function loadPracticeSign(sign) {
   setRing(practiceRing, 0, '');
   document.getElementById('btnGotIt').disabled = true;
 
-  // Load demo video
-  const entry = VOCAB.find(e => e.sign === sign);
-  if (entry?.asl_vidref) {
+    // Load demo video using yt_embedId
+  const entry = getVocabEntry(sign);
+  const ytId  = entry && entry.yt_embedId ? entry.yt_embedId.trim() : "";
+
+  if (ytId) {
     arenaVideoSlot.innerHTML = `
-      <blockquote class="signasldata-embed" data-vidref="${entry.asl_vidref}"
-        style="margin:0;width:100%;height:100%">
-        <a href="https://www.signasl.org/sign/${sign}">Watch '${sign}' in ASL</a>
-      </blockquote>`;
-    reloadSignASLWidget();
+      <div style="position:relative; width:100%; height:100%; background:#000;">
+        <iframe 
+          src="https://www.youtube.com/embed/${ytId}?rel=0&modestbranding=1&playsinline=1" 
+          style="position:absolute; top:0; left:0; width:100%; height:100%; border:none;"
+          title="ASL ${sign}" 
+          frameborder="0" 
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+          allowfullscreen>
+        </iframe>
+      </div>`;
   } else {
-    arenaVideoSlot.innerHTML = `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:13px">No demo video for this sign</div>`;
+    arenaVideoSlot.innerHTML = `
+      <div style="height:100%; display:flex; align-items:center; justify-content:center; color:#666; font-size:15px;">
+        No demo video yet
+      </div>`;
   }
 }
 
