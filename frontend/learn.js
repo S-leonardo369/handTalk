@@ -190,6 +190,7 @@ function reloadSignASLWidget() {
     document.head.appendChild(newScript);
 }
 
+// REPLACE WITH:
 function openSignModal(sign, aslId) {
     modalCurrentSign = sign;
     modalSignName.textContent = sign.toUpperCase();
@@ -202,7 +203,6 @@ function openSignModal(sign, aslId) {
 
     if (ytId) {
         videoContainer.innerHTML = `
-          <div style="position:relative; width:100%; padding-top:56.25%; background:#000;">
             <iframe
               src="https://www.youtube.com/embed/${ytId}?rel=0&modestbranding=1&playsinline=1"
               style="position:absolute; top:0; left:0; width:100%; height:100%; border:none;"
@@ -210,16 +210,16 @@ function openSignModal(sign, aslId) {
               frameborder="0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowfullscreen>
-            </iframe>
-          </div>`;
+            </iframe>`;
         videoContainer.style.display = 'block';
-        if (noVideoDiv) noVideoDiv.classList.add('hidden');
+        if (noVideoDiv) noVideoDiv.style.display = 'none';
     } else {
         videoContainer.innerHTML = '';
         videoContainer.style.display = 'none';
-        if (noVideoDiv) noVideoDiv.classList.remove('hidden');
+        if (noVideoDiv) noVideoDiv.style.display = '';
     }
 }
+
 
 function closeModal() {
     modal.classList.add('hidden');

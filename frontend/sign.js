@@ -225,8 +225,6 @@ function renderResults(results) {
 
   signCards.innerHTML = results.map((r, i) => buildCard(r, i)).join('');
 
-  // Re-init SignASL widget to convert all injected blockquotes
-  reloadSignASLWidget();
 
   resultsSection.style.display = '';
   emptyState.style.display     = 'none';
@@ -237,15 +235,23 @@ function renderResults(results) {
   resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+// REPLACE THE WHOLE buildCard FUNCTION WITH THIS:
 function buildCard(r, index) {
-  const videoHTML = r.found && r.asl_vidref
-    ? `<blockquote class="signasldata-embed" data-vidref="${r.asl_vidref}"
-         style="margin:0;width:100%;height:100%">
-         <a href="https://www.signasl.org/sign/${r.sign}">Watch '${r.sign}' in ASL</a>
-       </blockquote>`
+  const ytId = r.found && r.yt_embedId ? r.yt_embedId.trim() : '';
+
+  const videoHTML = ytId
+    ? `<div class="yt-thumb" data-ytid="${ytId}" style="position:relative;width:100%;height:100%;cursor:pointer;background:#000;">
+         <img src="https://img.youtube.com/vi/${ytId}/mqdefault.jpg"
+              style="width:100%;height:100%;object-fit:cover;" alt="ASL ${r.sign}" loading="lazy">
+         <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;">
+           <svg width="48" height="48" viewBox="0 0 68 48">
+             <path d="M66.5 7.7c-.8-2.9-3-5.2-5.9-6C55.8.5 34 .5 34 .5S12.2.5 7.4 1.7c-2.9.8-5.1 3.1-5.9 6C.3 12.5.3 24 .3 24s0 11.5 1.2 16.3c.8 2.9 3 5.2 5.9 6C12.2 47.5 34 47.5 34 47.5s21.8 0 26.6-1.2c2.9-.8 5.1-3.1 5.9-6 1.2-4.8 1.2-16.3 1.2-16.3s0-11.5-1.2-16.3z" fill="red"/>
+             <path d="M27.1 34.6L44.9 24 27.1 13.4v21.2z" fill="white"/>
+           </svg>
+         </div>
+       </div>`
     : `<div class="card-no-video">
-         <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
-              stroke="currentColor" stroke-width="1.5">
+         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
            <path d="M23 7l-7 5 7 5V7z"/>
            <rect x="1" y="5" width="15" height="14" rx="2"/>
          </svg>
@@ -264,6 +270,7 @@ function buildCard(r, index) {
       </div>
     </div>`;
 }
+
 
 // ── Play All ──────────────────────────────────────────────────────────────────
 btnPlayAll.addEventListener('click', () => {
@@ -335,6 +342,21 @@ btnCopyWords.addEventListener('click', () => {
     toast('Copied to clipboard', 'success');
   }).catch(() => toast('Copy failed'));
 });
+
+// Thumbnail click → load iframe (lazy load for speed)
+signCards.addEventListener('click', (e) => {
+  const thumb = e.target.closest('.yt-thumb');
+  if (!thumb) return;
+  const ytId = thumb.dataset.ytid;
+  const iframe = document.createElement('iframe');
+  iframe.src = `https://www.youtube.com/embed/${ytId}?rel=0&modestbranding=1&playsinline=1&autoplay=1`;
+  iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none;';
+  iframe.setAttribute('frameborder', '0');
+  iframe.setAttribute('allow', 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture');
+  iframe.setAttribute('allowfullscreen', '');
+  thumb.replaceWith(iframe);
+});
+
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 // Focus textarea on load
