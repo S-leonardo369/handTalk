@@ -22,24 +22,14 @@ const PREDICT_MSG = '{"action":"predict"}';
 const DRAW_CONN = Object.freeze({ color: 'rgba(41,196,154,.35)', lineWidth: 1.5 });
 const DRAW_LM   = Object.freeze({ color: 'rgba(41,196,154,.8)',  lineWidth: 1, radius: 3 });
 
-/** Responsive + mirrored drawing for mobile */
 function getResponsiveDrawConfig() {
   const isMobile = window.innerWidth < 768 || window.devicePixelRatio > 2.5;
-
-  const base = isMobile ? {
-    conn: { color: 'rgba(41,196,154,.35)', lineWidth: 1.0 },
-    lm:   { color: 'rgba(41,196,154,.8)',  lineWidth: 0.8, radius: 2.0 }
-  } : { conn: DRAW_CONN, lm: DRAW_LM };
-
-  // Mirror on mobile (selfie view)
-  if (isMobile) {
-    return {
-      ...base,
-      mirror: true
-    };
-  }
-  return base;
+  return isMobile
+    ? { conn: { color: 'rgba(41,196,154,.35)', lineWidth: 1.0 },
+        lm:   { color: 'rgba(41,196,154,.8)',  lineWidth: 0.8, radius: 2.0 } }
+    : { conn: DRAW_CONN, lm: DRAW_LM };
 }
+
 
 const CONFETTI_COLORS = ['#29c49a', '#4dd9b4', '#1a9e7c', '#a8f0dc', '#e8e8ec'];
 
@@ -307,23 +297,22 @@ function packLandmarks(res) {
   return o;
 }
 
-// ── Holistic results handler ──────────────────────────────────────────────────
-// ── Holistic results handler ──────────────────────────────────────────────────
 function onHolisticResults(results) {
   if (!canvas || !ctx || !video) return;
 
   const vw = video.videoWidth;
   const vh = video.videoHeight;
 
-  if (vw > 0 && vh > 0 && (vw !== lastVideoW || vh !== lastVideoH)) {
-    lastVideoW = vw;
-    lastVideoH = vh;
-    canvas.width = vw;
-    canvas.height = vh;
+  // Canvas pixel size = screen size (no squashing)
+  const dw = window.innerWidth;
+  const dh = window.innerHeight;
+  if (canvas.width !== dw || canvas.height !== dh) {
+    canvas.width  = dw;
+    canvas.height = dh;
   }
-  if (vw <= 0 || vh <= 0) return;
+  ctx.clearRect(0, 0, dw, dh);
 
-  ctx.clearRect(0, 0, vw, vh);
+  if (vw <= 0 || vh <= 0) return;
 
   const hasHand = (results.leftHandLandmarks?.length > 0) ||
                   (results.rightHandLandmarks?.length > 0);
@@ -333,37 +322,40 @@ function onHolisticResults(results) {
     handRing?.classList.toggle('active', hasHand);
   }
 
-  const config = getResponsiveDrawConfig();
+  if (hasHand) {
+    // Match video's object-fit:cover crop so landmarks sit on the right pixels
+    const cvScale = Math.max(dw / vw, dh / vh);
+    const ox = (dw - vw * cvScale) / 2;
+    const oy = (dh - vh * cvScale) / 2;
+    ctx.setTransform(vw * cvScale / dw, 0, 0, vh * cvScale / dh, ox, oy);
 
-  // Mirror the drawing on mobile (selfie view)
-  if (config.mirror) {
-    ctx.save();
-    ctx.scale(-1, 1);                    // mirror horizontally
-    ctx.translate(-vw, 0);               // shift back into view
+    const config = getResponsiveDrawConfig();
+    if (results.leftHandLandmarks) {
+      window.drawConnectors(ctx, results.leftHandLandmarks, window.HAND_CONNECTIONS, config.conn);
+      window.drawLandmarks(ctx,  results.leftHandLandmarks, config.lm);
+    }
+    if (results.rightHandLandmarks) {
+      window.drawConnectors(ctx, results.rightHandLandmarks, window.HAND_CONNECTIONS, config.conn);
+      window.drawLandmarks(ctx,  results.rightHandLandmarks, config.lm);
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
-
-  if (results.leftHandLandmarks) {
-    window.drawConnectors(ctx, results.leftHandLandmarks, window.HAND_CONNECTIONS, config.conn);
-    window.drawLandmarks(ctx,  results.leftHandLandmarks, config.lm);
-  }
-  if (results.rightHandLandmarks) {
-    window.drawConnectors(ctx, results.rightHandLandmarks, window.HAND_CONNECTIONS, config.conn);
-    window.drawLandmarks(ctx,  results.rightHandLandmarks, config.lm);
-  }
-
-  if (config.mirror) ctx.restore();     // restore normal canvas
 
   if (ws?.readyState !== WebSocket.OPEN) return;
 
-  frameCount++;
-
-  ws.send(JSON.stringify({ action: 'frame', landmarks: packLandmarks(results) }));
-
-  if (frameCount >= SEND_EVERY_N) {
-    ws.send(PREDICT_MSG);
+  if (hasHand && !demoRunning) {
+    // Only send frames when hands are visible and demo is not running
+    frameCount++;
+    ws.send(JSON.stringify({ action: 'frame', landmarks: packLandmarks(results) }));
+    if (frameCount >= SEND_EVERY_N) {
+      ws.send(PREDICT_MSG);
+      frameCount = 0;
+    }
+  } else {
     frameCount = 0;
   }
 }
+
 
 // ── Start camera ──────────────────────────────────────────────────────────────
 async function startCamera() {
@@ -450,7 +442,6 @@ function addSentence(sentence, gloss) {
     toast(isFirst ? 'First translation ✓' : `${sentenceTotal} translations 🎉`, 2000);
   }
 
-  speak(sentence);
   showControls();
 }
 
@@ -569,6 +560,37 @@ if (sentenceText) sentenceText.classList.add('placeholder');
 if (confThresh)   hudConfThresh = parseInt(confThresh.value, 10) / 100;
 checkBackend();
 window.speechSynthesis?.getVoices();
+
+const DEMO_SEQUENCE = ['HELLO', 'NICE', 'MEET', 'LEARN', 'SIGN', 'GOOD', 'PLEASE', 'THANK-YOU'];
+let demoRunning = false;
+
+document.getElementById('btnDemo')?.addEventListener('click', () => {
+  settingsPanel?.classList.remove('open');
+  startScreen?.classList.add('gone');
+  controls?.classList.remove('hidden');
+  topBar?.classList.remove('hidden');
+  isRunning = true;
+  demoRunning = true;
+  clearAll();
+  toast('Running demo…');
+
+  let i = 0;
+  const iv = setInterval(() => {
+    if (i < DEMO_SEQUENCE.length) {
+      updateHUD(DEMO_SEQUENCE[i], 0.82);
+      updateChips(DEMO_SEQUENCE.slice(0, i + 1));
+      i++;
+    } else {
+      clearInterval(iv);
+      const gloss    = DEMO_SEQUENCE.join(' ');
+      const sentence = DEMO_SEQUENCE.map(s => s.toLowerCase().replace(/-/g, ' ')).join(' ');
+      addSentence(sentence.charAt(0).toUpperCase() + sentence.slice(1) + '.', gloss);
+      updateChips([]);
+      demoRunning = false;
+    }
+  }, 3369);
+});
+
+
 speechSynthesis.addEventListener?.('voiceschanged', () => speechSynthesis.getVoices());
-console.log('%c✋ ASL Translator', 'font-size:18px;font-weight:bold;color:#29c49a');
-console.log('%cPowered by hoyso48 TFLite model (Kaggle 1st place)', 'color:#7a7a8e');
+console.log('%c✋ handTalk', 'font-size:18px;font-weight:bold;color:#29c49a');

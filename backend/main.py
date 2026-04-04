@@ -21,12 +21,14 @@ app.add_middleware(
 )
 
 # ── Gates ─────────────────────────────────────────────────────────────────────
+
 GATES: dict[str, float | int] = {
-    "confidence": 0.22,
-    "margin":     0.04,
-    "consecutive": 2,
-    "motion":     0.012,
+    "confidence": 0.30,
+    "margin":     0.05,
+    "consecutive": 3,
+    "motion":     0.010,
 }
+
 MAX_FRAMES = 80
 
 # ── Globals ───────────────────────────────────────────────────────────────────

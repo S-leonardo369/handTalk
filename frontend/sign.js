@@ -14,11 +14,7 @@ const PLAY_DELAY_MS = 2800;   // ms between cards in Play All mode
 const signInput      = document.getElementById('signInput');
 const charCount      = document.getElementById('charCount');
 const btnTranslate   = document.getElementById('btnTranslate');
-const btnVoice       = document.getElementById('btnVoice');
-const btnVoiceLabel  = document.getElementById('btnVoiceLabel');
 const btnClear       = document.getElementById('btnClear');
-const voiceStatus    = document.getElementById('voiceStatus');
-const voiceStatusTxt = document.getElementById('voiceStatusText');
 const resultsSection = document.getElementById('resultsSection');
 const skeletonSection= document.getElementById('skeletonSection');
 const emptyState     = document.getElementById('emptyState');
@@ -35,7 +31,6 @@ let currentResults  = [];   // [{word, sign, asl_vidref, found}]
 let isPlayingAll    = false;
 let playAllTimer    = null;
 let recognition     = null;
-let isListening     = false;
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 let toastTimer;
@@ -87,65 +82,6 @@ function clearResults() {
   signCards.innerHTML            = '';
 }
 
-// ── Voice input ───────────────────────────────────────────────────────────────
-const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-if (!SpeechRecognition) {
-  btnVoice.classList.add('no-support');
-  btnVoice.title = 'Speech recognition not supported in this browser';
-  btnVoice.disabled = true;
-} else {
-  recognition = new SpeechRecognition();
-  recognition.continuous      = false;
-  recognition.interimResults  = true;
-  recognition.lang            = 'en-US';
-
-  recognition.onstart = () => {
-    isListening = true;
-    btnVoice.classList.add('listening');
-    btnVoiceLabel.textContent    = 'Stop';
-    voiceStatus.classList.add('show');
-    voiceStatusTxt.textContent   = 'Listening…';
-  };
-
-  recognition.onresult = (e) => {
-    const transcript = Array.from(e.results)
-      .map(r => r[0].transcript)
-      .join('');
-    signInput.value              = transcript.slice(0, MAX_CHARS);
-    charCount.textContent        = `${signInput.value.length} / ${MAX_CHARS}`;
-    btnTranslate.disabled        = signInput.value.trim().length === 0;
-    voiceStatusTxt.textContent   = `Heard: "${transcript.slice(0, 40)}${transcript.length > 40 ? '…' : ''}"`;
-  };
-
-  recognition.onend = () => {
-    isListening = false;
-    btnVoice.classList.remove('listening');
-    btnVoiceLabel.textContent = 'Voice';
-    voiceStatus.classList.remove('show');
-    // Auto-translate if we got something
-    if (signInput.value.trim()) translate();
-  };
-
-  recognition.onerror = (e) => {
-    isListening = false;
-    btnVoice.classList.remove('listening');
-    btnVoiceLabel.textContent = 'Voice';
-    voiceStatus.classList.remove('show');
-    if (e.error !== 'no-speech') {
-      toast(`Mic error: ${e.error}`, 'danger');
-    }
-  };
-
-  btnVoice.addEventListener('click', () => {
-    if (isListening) {
-      recognition.stop();
-    } else {
-      try { recognition.start(); }
-      catch { toast('Could not start microphone', 'danger'); }
-    }
-  });
-}
 
 // ── Translate ─────────────────────────────────────────────────────────────────
 btnTranslate.addEventListener('click', translate);
