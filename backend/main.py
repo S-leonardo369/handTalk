@@ -26,6 +26,7 @@ TF_MODEL = None
 ORD2SIGN:    dict[int, str] = {}
 SIGN2ID:     dict[str, int] = {}          # ← fixed type
 ASL_VIDREF:  dict[int, str] = {}          # sign_id → asl_vidref (SignASL embed ID)
+YT_EMBED:    dict[int, str] = {}
 ROWS_PER_FRAME: int | None = None
 FORMAT_DF: pd.DataFrame | None = None
 MODEL_ERROR: str | None = None
@@ -39,7 +40,7 @@ _GROUP_TO_KEY = {
 
 
 def load_model():
-    global TF_MODEL, ORD2SIGN, SIGN2ID, ASL_VIDREF, ROWS_PER_FRAME, FORMAT_DF, MODEL_ERROR
+    global TF_MODEL, ORD2SIGN, SIGN2ID, ASL_VIDREF, YT_EMBED, ROWS_PER_FRAME, FORMAT_DF, MODEL_ERROR
     base = Path(__file__).resolve().parent
     model_path = base / "model" / "vocab_model_hoyso48.tflite"
     map_path   = base / "model" / "vocab_map.json"
@@ -49,7 +50,6 @@ def load_model():
     ORD2SIGN = {}
     SIGN2ID  = {}
     ASL_VIDREF = {}
-    YT_EMBED: dict = {}
     ROWS_PER_FRAME = None
     FORMAT_DF = None
     MODEL_ERROR = None
@@ -75,6 +75,7 @@ def load_model():
         ORD2SIGN   = {int(k): v["sign"]                    for k, v in raw.items()}
         SIGN2ID    = {v["sign"].lower(): int(k)            for k, v in raw.items()}
         ASL_VIDREF = {int(k): v.get("asl_vidref", "")     for k, v in raw.items()}
+        YT_EMBED   = {int(k): v.get("yt_embedId", "")     for k, v in raw.items()}
         print(f"[OK] Sign map — {len(ORD2SIGN)} signs")
     except Exception as e:
         MODEL_ERROR = str(e)
@@ -215,10 +216,55 @@ def vocab_list():
                 "sign_id":    sid,
                 "sign":       name,
                 "asl_vidref": ASL_VIDREF.get(sid, ""),
+                "yt_embedId": YT_EMBED.get(sid, ""),
             }
             for sid, name in sorted(ORD2SIGN.items(), key=lambda x: x[1].lower())
         ]
     }
+
+# ── Text → Sign endpoint ──────────────────────────────────────────────────────
+from pydantic import BaseModel
+import re as _re
+
+class TextToSignRequest(BaseModel):
+    text: str
+
+@app.post("/text-to-sign")
+def text_to_sign(req: TextToSignRequest):
+    """Tokenise text, look each word up in the sign vocabulary."""
+    raw = (req.text or "").strip()
+    if not raw:
+        return {"results": [], "input": raw}
+
+    NORM = {
+        "i'm": "i", "you're": "you", "don't": "no",
+        "cant": "can", "can't": "can", "won't": "stop",
+    }
+
+    tokens = _re.findall(r"[a-z'\-]+", raw.lower())
+    results = []
+    for token in tokens:
+        word = NORM.get(token, token)
+        assert word is not None
+        sid = SIGN2ID.get(word)
+        if sid is None and word.endswith("s"):
+            sid = SIGN2ID.get(word[:-1])
+        if sid is None and not word.endswith("s"):
+            sid = SIGN2ID.get(word + "s")
+
+        if sid is not None:
+            results.append({
+                "word":      token,
+                "sign":      ORD2SIGN[sid],
+                "asl_vidref": ASL_VIDREF.get(sid, ""),
+                "yt_embedId": YT_EMBED.get(sid, ""),
+                "found":     True,
+            })
+        else:
+            results.append({"word": token, "sign": None,
+                            "asl_vidref": "", "yt_embedId": "", "found": False})
+
+    return {"results": results, "input": raw}
 
 @app.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
@@ -272,8 +318,17 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                 top3 = top_k_from_probs(probs, 3)
                 print(f"[DEBUG] Frames={len(state['frames'])} | Top3 → {[(t['sign'], round(t['confidence'],4)) for t in top3]}")
 
+                # Margin gate
+                top2   = np.partition(probs, -2)[-2:] if probs.size > 1 else probs
+                margin = float(top2[1] - top2[0])     if probs.size > 1 else 1.0
+
                 committed = None
-                if top_prob >= GATES["confidence"]:
+                gate      = None
+                if top_prob < float(GATES["confidence"]):
+                    gate = "low_confidence"
+                elif margin < float(GATES["margin"]):
+                    gate = "low_margin"
+                else:
                     sign = ORD2SIGN.get(top_id)
                     if sign:
                         committed = sign
@@ -286,11 +341,13 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                             })
 
                 await websocket.send_json({
-                    "type": "prediction",
-                    "sign": committed,
+                    "type":       "prediction",
+                    "sign":       committed,
                     "confidence": round(top_prob, 4),
-                    "buffer": state["buf"].signs,
-                    "top5": top_k_from_probs(probs, 5),
+                    "margin":     round(margin, 4),
+                    "gate":       gate,
+                    "buffer":     state["buf"].signs,
+                    "top5":       top_k_from_probs(probs, 5),
                 })
 
             elif action == "flush":
@@ -302,6 +359,18 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                         "sentence": gloss_to_sentence(flushed),
                         "gloss": " ".join(flushed),
                     })
+
+            elif action == "set_threshold":
+                for key in ("confidence", "margin", "motion"):
+                    if key in data:
+                        GATES[key] = float(data[key])
+                if "consecutive" in data:
+                    GATES["consecutive"] = int(data["consecutive"])
+                state["motion_thr"] = float(GATES["motion"])
+                await websocket.send_json({"type": "thresholds_updated", **GATES})
+
+            elif action == "set_pause":
+                state["buf"].pause_threshold = float(data.get("value", 1.5))
 
     except WebSocketDisconnect:
         connected.pop(client_id, None)

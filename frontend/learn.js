@@ -23,15 +23,6 @@ const DRAW_LM   = Object.freeze({ color: 'rgba(41,196,154,.8)',  lineWidth: 1, r
 // ── SignASL widget re-initialiser ─────────────────────────────────────────────
 // widgets.js runs on first load and converts existing blockquotes.
 // For dynamically injected blockquotes, we re-execute the script.
-function reloadSignASLWidget() {
-  const WIDGET_SRC = 'https://embed.signasl.org/widgets.js';
-  const old = document.querySelector(`script[src="${WIDGET_SRC}"]`);
-  if (old) old.remove();
-  const s = document.createElement('script');
-  s.src = WIDGET_SRC;
-  s.charset = 'utf-8';
-  document.body.appendChild(s);
-}
 
 
 
@@ -91,7 +82,7 @@ function markWeak(p, sign) {
 let progress = loadProgress();
 
 // ── Vocabulary ────────────────────────────────────────────────────────────────
-let VOCAB = [];  // [{sign_id, sign, asl_vidref}]
+let VOCAB = [];  // [{sign_id, sign, asl_vidref, yt_embedId}]
 
 async function fetchVocab() {
   try {
@@ -177,7 +168,6 @@ function renderLibrary() {
   });
 }
 
-libSearch.addEventListener('input', renderLibrary);
 catFilter.addEventListener('change', renderLibrary);
 
 // ── Sign modal ────────────────────────────────────────────────────────────────
@@ -187,39 +177,54 @@ const modalVideoSlot= document.getElementById('modalVideoSlot');
 const modalNoVideo  = document.getElementById('modalNoVideo');
 let   modalCurrentSign = null;
 
+function reloadSignASLWidget() {
+    // Remove existing SignASL script to avoid duplicates
+    const oldScript = document.querySelector('script[src="https://embed.signasl.org/widgets.js"]');
+    if (oldScript) oldScript.remove();
+    
+    // Re-inject the widget script
+    const newScript = document.createElement('script');
+    newScript.src = 'https://embed.signasl.org/widgets.js';
+    newScript.async = true;
+    newScript.charset = 'utf-8';
+    document.head.appendChild(newScript);
+}
+
+// Update your openSignModal function
 function openSignModal(sign, aslId) {
-  modalCurrentSign = sign;
-  modalSignName.textContent = sign.toUpperCase();
-  modal.classList.remove('hidden');
+    modalCurrentSign = sign;
+    modalSignName.textContent = sign.toUpperCase();
+    modal.classList.remove('hidden');
 
-  const entry = getVocabEntry(sign);           // ← safe & fast
-  const ytId  = entry && entry.yt_embedId ? entry.yt_embedId.trim() : "";
+    const entry = getVocabEntry(sign);
+    const vidref = entry && entry.asl_vidref ? entry.asl_vidref.trim() : "";
+    const videoContainer = modalVideoSlot;
+    const noVideoDiv = modalNoVideo;
 
-  if (ytId) {
-    modalVideoSlot.innerHTML = `
-      <div style="position:relative; width:100%; height:100%; background:#000;">
-        <iframe 
-          src="https://www.youtube.com/embed/${ytId}?rel=0&modestbranding=1&playsinline=1" 
-          style="position:absolute; top:0; left:0; width:100%; height:100%; border:none;"
-          title="ASL ${sign}" 
-          frameborder="0" 
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-          allowfullscreen>
-        </iframe>
-      </div>`;
-  } else {
-    modalVideoSlot.innerHTML = `
-      <div style="height:100%; display:flex; align-items:center; justify-content:center; color:#666; font-size:15px;">
-        No video yet
-      </div>`;
-  }
+    if (vidref) {
+        const blockquote = document.createElement('blockquote');
+        blockquote.className = 'signasldata-embed';
+        blockquote.setAttribute('data-vidref', vidref);
+        blockquote.innerHTML = `<a href="https://www.signasl.org/sign/${sign}">Watch how to sign '${sign}' in American Sign Language</a>`;
+        videoContainer.innerHTML = '';
+        videoContainer.appendChild(blockquote);
+        videoContainer.style.display = 'block';
+        if (noVideoDiv) noVideoDiv.classList.add('hidden');
+        reloadSignASLWidget();
+    } else {
+        videoContainer.innerHTML = '';
+        videoContainer.style.display = 'none';
+        if (noVideoDiv) noVideoDiv.classList.remove('hidden');
+    }
 }
 
 function closeModal() {
-  modal.classList.add('hidden');
-  modalVideoSlot.innerHTML = '';  // clear SignASL embed
+    modal.classList.add('hidden');
+    modalVideoSlot.innerHTML = '';  // stop video, free resources
 }
 
+
+// ── Attach close listeners ─────────────────────────────────────────
 document.getElementById('modalClose').addEventListener('click', closeModal);
 document.getElementById('modalClose2').addEventListener('click', closeModal);
 modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
@@ -274,7 +279,15 @@ function loadScript(src) {
 }
 
 async function startCamera(videoEl, canvasEl, placeholderEl, onResults) {
+  // Prevent double-start
+  if (videoEl && videoEl.srcObject) {
+    console.log("Camera already active — skipping start");
+    return null;
+  }
+
   await loadHolistic();
+
+  // ... rest of the function stays exactly the same ...
 
   let stream;
   try {
@@ -313,11 +326,50 @@ async function startCamera(videoEl, canvasEl, placeholderEl, onResults) {
   return { stream, holistic: h, camera: cam };
 }
 
+// Update your stopCameraHandle function
 function stopCameraHandle(handle) {
-  if (!handle) return;
-  try { handle.camera.stop(); } catch {}
-  try { handle.holistic.close(); } catch {}
-  handle.stream.getTracks().forEach(t => t.stop());
+    if (!handle) return;
+    
+    try { 
+        if (handle.camera) {
+            handle.camera.stop(); 
+        }
+    } catch (e) { console.warn("Error stopping camera:", e); }
+
+    // Add a short delay before closing the holistic model to avoid race conditions
+    setTimeout(() => {
+        try { 
+            if (handle.holistic) {
+                handle.holistic.close(); 
+            }
+        } catch (e) { console.warn("Error closing holistic:", e); }
+    }, 50);
+
+    try {
+        if (handle.stream) {
+            handle.stream.getTracks().forEach(track => {
+                try { track.stop(); } catch(e) {}
+            });
+        }
+    } catch(e) {}
+}
+
+// Add this new function to your learn.js file
+async function resetCameraAndHolistic() {
+    // Stop the current camera and holistic instance
+    stopCameraHandle(session.cameraHandle);
+    session.cameraHandle = null;
+    holisticLoaded = false;
+    holisticInst = null;
+    
+    // Wait for cleanup
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // Re-initialize holistic and restart the camera
+    await loadHolistic();
+    if (session.active) {
+        await initPracticeCamera();
+    }
 }
 
 function packLandmarks(res) {
