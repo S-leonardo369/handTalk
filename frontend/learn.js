@@ -190,27 +190,30 @@ function reloadSignASLWidget() {
     document.head.appendChild(newScript);
 }
 
-// Update your openSignModal function
 function openSignModal(sign, aslId) {
     modalCurrentSign = sign;
     modalSignName.textContent = sign.toUpperCase();
     modal.classList.remove('hidden');
 
     const entry = getVocabEntry(sign);
-    const vidref = entry && entry.asl_vidref ? entry.asl_vidref.trim() : "";
+    const ytId  = entry && entry.yt_embedId ? entry.yt_embedId.trim() : "";
     const videoContainer = modalVideoSlot;
     const noVideoDiv = modalNoVideo;
 
-    if (vidref) {
-        const blockquote = document.createElement('blockquote');
-        blockquote.className = 'signasldata-embed';
-        blockquote.setAttribute('data-vidref', vidref);
-        blockquote.innerHTML = `<a href="https://www.signasl.org/sign/${sign}">Watch how to sign '${sign}' in American Sign Language</a>`;
-        videoContainer.innerHTML = '';
-        videoContainer.appendChild(blockquote);
+    if (ytId) {
+        videoContainer.innerHTML = `
+          <div style="position:relative; width:100%; padding-top:56.25%; background:#000;">
+            <iframe
+              src="https://www.youtube.com/embed/${ytId}?rel=0&modestbranding=1&playsinline=1"
+              style="position:absolute; top:0; left:0; width:100%; height:100%; border:none;"
+              title="ASL ${sign}"
+              frameborder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowfullscreen>
+            </iframe>
+          </div>`;
         videoContainer.style.display = 'block';
         if (noVideoDiv) noVideoDiv.classList.add('hidden');
-        reloadSignASLWidget();
     } else {
         videoContainer.innerHTML = '';
         videoContainer.style.display = 'none';
@@ -406,11 +409,10 @@ function connectLearnWS(onMsg) {
   if (ws && ws.readyState <= WebSocket.OPEN) return;
   ws = new WebSocket(`${WS_BASE}/ws/${LEARN_ID}`);
   ws.onopen = () => {
-    // Tighter gates for scoring — fewer false positives
     ws.send(JSON.stringify({
       action: 'set_threshold',
-      confidence: 0.45,
-      margin:     0.10,
+      confidence: 0.28,
+      margin:     0.06,
       consecutive: 1,   // backend consecutive is irrelevant — we handle it in JS
     }));
   };

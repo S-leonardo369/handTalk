@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>handTalk Sign — Text to ASL</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="sign.css">
+  <script async src="https://embed.signasl.org/widgets.js" charset="utf-8"></script>
+</head>
+<body>
+
+<!-- ── Top Nav ──────────────────────────────────────────────────────────── -->
+<nav class="ht-nav">
+  <a href="index.html" class="ht-logo">✋ hand<span>Talk</span></a>
+  <a href="index.html"  class="nav-link">Translate</a>
+  <a href="sign.html"   class="nav-link active">Sign</a>
+  <a href="learn.html"  class="nav-link">Learn</a>
+</nav>
+
+<!-- ── Page ─────────────────────────────────────────────────────────────── -->
+<div class="sign-page">
+
+  <div class="sign-header">
+    <h1>Text <span>→</span> Sign</h1>
+    <p>Type or speak a sentence — see every word signed in ASL</p>
+  </div>
+
+  <!-- ── Input card ──────────────────────────────────────────────────────── -->
+  <div class="input-card">
+    <div class="textarea-wrap">
+      <textarea
+        class="sign-textarea"
+        id="signInput"
+        placeholder="Type a sentence… e.g. hello, how are you"
+        maxlength="300"
+        spellcheck="false"
+        autocomplete="off"
+      ></textarea>
+      <span class="char-count" id="charCount">0 / 300</span>
+    </div>
+
+    <div class="voice-status" id="voiceStatus">
+      <span class="voice-dot"></span>
+      <span id="voiceStatusText">Listening…</span>
+    </div>
+
+    <div class="input-actions">
+      <button class="btn-translate" id="btnTranslate" disabled>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2.5">
+          <path d="M5 12h14M12 5l7 7-7 7"/>
+        </svg>
+        Translate to Sign
+      </button>
+      <button class="btn-voice" id="btnVoice">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          <line x1="12" y1="19" x2="12" y2="23"/>
+          <line x1="8"  y1="23" x2="16" y2="23"/>
+        </svg>
+        <span id="btnVoiceLabel">Voice</span>
+      </button>
+      <button class="btn-clear" id="btnClear" title="Clear">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Results ──────────────────────────────────────────────────────────── -->
+  <div id="resultsSection" style="display:none">
+    <div class="results-header">
+      <span class="results-title" id="resultsTitle">Signs</span>
+      <div class="results-actions-bar">
+        <button class="btn-play-all" id="btnPlayAll" disabled>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="5,3 19,12 5,21"/>
+          </svg>
+          Play All
+        </button>
+        <button class="btn-copy" id="btnCopyWords" title="Copy words">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="unknown-banner" id="unknownBanner"></div>
+
+    <div class="sign-cards"   id="signCards"></div>
+  </div>
+
+  <!-- ── Loading skeleton ─────────────────────────────────────────────────── -->
+  <div id="skeletonSection" style="display:none">
+    <div class="results-header">
+      <span class="results-title">Translating…</span>
+    </div>
+    <div class="skeleton-grid" id="skeletonGrid"></div>
+  </div>
+
+  <!-- ── Empty state ──────────────────────────────────────────────────────── -->
+  <div class="empty-results" id="emptyState">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" stroke-width="1.2">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+    </svg>
+    <h3>Type a sentence above</h3>
+    <p>Each word will be shown as an ASL sign video</p>
+  </div>
+
+</div>
+
+<!-- ── Toast ─────────────────────────────────────────────────────────────── -->
+<div id="sign-toast"></div>
+
+<script src="sign.js"></script>
+</body>
+</html>

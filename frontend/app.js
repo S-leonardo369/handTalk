@@ -18,9 +18,28 @@ const WS_RECONNECT_MAX  = 16000;
 /** Pre-serialized string — avoids JSON.stringify on every predict trigger */
 const PREDICT_MSG = '{"action":"predict"}';
 
-/** Reuse frozen style objects — MediaPipe drawing never allocates per frame */
+/** Original constants — kept for desktop/tablet */
 const DRAW_CONN = Object.freeze({ color: 'rgba(41,196,154,.35)', lineWidth: 1.5 });
 const DRAW_LM   = Object.freeze({ color: 'rgba(41,196,154,.8)',  lineWidth: 1, radius: 3 });
+
+/** Responsive + mirrored drawing for mobile */
+function getResponsiveDrawConfig() {
+  const isMobile = window.innerWidth < 768 || window.devicePixelRatio > 2.5;
+
+  const base = isMobile ? {
+    conn: { color: 'rgba(41,196,154,.35)', lineWidth: 1.0 },
+    lm:   { color: 'rgba(41,196,154,.8)',  lineWidth: 0.8, radius: 2.0 }
+  } : { conn: DRAW_CONN, lm: DRAW_LM };
+
+  // Mirror on mobile (selfie view)
+  if (isMobile) {
+    return {
+      ...base,
+      mirror: true
+    };
+  }
+  return base;
+}
 
 const CONFETTI_COLORS = ['#29c49a', '#4dd9b4', '#1a9e7c', '#a8f0dc', '#e8e8ec'];
 
@@ -289,39 +308,55 @@ function packLandmarks(res) {
 }
 
 // ── Holistic results handler ──────────────────────────────────────────────────
+// ── Holistic results handler ──────────────────────────────────────────────────
 function onHolisticResults(results) {
   if (!canvas || !ctx || !video) return;
 
   const vw = video.videoWidth;
   const vh = video.videoHeight;
+
   if (vw > 0 && vh > 0 && (vw !== lastVideoW || vh !== lastVideoH)) {
-    lastVideoW = vw; lastVideoH = vh;
-    canvas.width = vw; canvas.height = vh;
+    lastVideoW = vw;
+    lastVideoH = vh;
+    canvas.width = vw;
+    canvas.height = vh;
   }
   if (vw <= 0 || vh <= 0) return;
+
   ctx.clearRect(0, 0, vw, vh);
 
-  const hasHand = (results.leftHandLandmarks?.length > 0)
-               || (results.rightHandLandmarks?.length > 0);
+  const hasHand = (results.leftHandLandmarks?.length > 0) ||
+                  (results.rightHandLandmarks?.length > 0);
+
   if (hasHand !== handVisible) {
     handVisible = hasHand;
     handRing?.classList.toggle('active', hasHand);
   }
 
+  const config = getResponsiveDrawConfig();
+
+  // Mirror the drawing on mobile (selfie view)
+  if (config.mirror) {
+    ctx.save();
+    ctx.scale(-1, 1);                    // mirror horizontally
+    ctx.translate(-vw, 0);               // shift back into view
+  }
+
   if (results.leftHandLandmarks) {
-    window.drawConnectors(ctx, results.leftHandLandmarks, window.HAND_CONNECTIONS, DRAW_CONN);
-    window.drawLandmarks(ctx,  results.leftHandLandmarks, DRAW_LM);
+    window.drawConnectors(ctx, results.leftHandLandmarks, window.HAND_CONNECTIONS, config.conn);
+    window.drawLandmarks(ctx,  results.leftHandLandmarks, config.lm);
   }
   if (results.rightHandLandmarks) {
-    window.drawConnectors(ctx, results.rightHandLandmarks, window.HAND_CONNECTIONS, DRAW_CONN);
-    window.drawLandmarks(ctx,  results.rightHandLandmarks, DRAW_LM);
+    window.drawConnectors(ctx, results.rightHandLandmarks, window.HAND_CONNECTIONS, config.conn);
+    window.drawLandmarks(ctx,  results.rightHandLandmarks, config.lm);
   }
+
+  if (config.mirror) ctx.restore();     // restore normal canvas
 
   if (ws?.readyState !== WebSocket.OPEN) return;
 
   frameCount++;
 
-  // Send frame with ALL landmarks (face included) every frame
   ws.send(JSON.stringify({ action: 'frame', landmarks: packLandmarks(results) }));
 
   if (frameCount >= SEND_EVERY_N) {

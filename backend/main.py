@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 import json
+import re
 import time
 from collections import deque
 from pathlib import Path
@@ -8,12 +10,18 @@ import numpy as np
 import pandas as pd
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 app = FastAPI(title="ASL Translator API")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# ── Tuned for hoyso48 ───────────────────────────────────────────────────────
-GATES = {
+# ── Gates ─────────────────────────────────────────────────────────────────────
+GATES: dict[str, float | int] = {
     "confidence": 0.22,
     "margin":     0.04,
     "consecutive": 2,
@@ -21,195 +29,239 @@ GATES = {
 }
 MAX_FRAMES = 80
 
-# ── Globals ─────────────────────────────────────────────────────────────────
-TF_MODEL = None
-ORD2SIGN:    dict[int, str] = {}
-SIGN2ID:     dict[str, int] = {}          # ← fixed type
-ASL_VIDREF:  dict[int, str] = {}          # sign_id → asl_vidref (SignASL embed ID)
-YT_EMBED:    dict[int, str] = {}
-ROWS_PER_FRAME: int | None = None
-FORMAT_DF: pd.DataFrame | None = None
-MODEL_ERROR: str | None = None
+# ── Globals ───────────────────────────────────────────────────────────────────
+TF_MODEL        = None
+ORD2SIGN:  dict[int, str] = {}
+SIGN2ID:   dict[str, int] = {}
+ASL_VIDREF: dict[int, str] = {}
+YT_EMBED:   dict[int, str] = {}
+ROWS_PER_FRAME: int | None  = None
+MODEL_ERROR:    str | None  = None
 
-_GROUP_TO_KEY = {
-    "face": "faceLandmarks",
-    "pose": "poseLandmarks",
-    "left_hand": "leftHandLandmarks",
+# Precomputed at load time — eliminates pandas work in the hot path
+GROUP_IDX:  dict[str, tuple[np.ndarray, np.ndarray]] = {}
+NOSE_ROW:   int | None = None
+
+_GROUP_TO_KEY: dict[str, str] = {
+    "face":       "faceLandmarks",
+    "pose":       "poseLandmarks",
+    "left_hand":  "leftHandLandmarks",
     "right_hand": "rightHandLandmarks",
 }
 
 
-def load_model():
-    global TF_MODEL, ORD2SIGN, SIGN2ID, ASL_VIDREF, YT_EMBED, ROWS_PER_FRAME, FORMAT_DF, MODEL_ERROR
-    base = Path(__file__).resolve().parent
-    model_path = base / "model" / "vocab_model_hoyso48.tflite"
-    map_path   = base / "model" / "vocab_map.json"
+# ── Model loading ─────────────────────────────────────────────────────────────
+def load_model() -> None:
+    global TF_MODEL, ORD2SIGN, SIGN2ID, ASL_VIDREF, YT_EMBED
+    global ROWS_PER_FRAME, MODEL_ERROR, GROUP_IDX, NOSE_ROW
+
+    base        = Path(__file__).resolve().parent
+    model_path  = base / "model" / "vocab_model_hoyso48.tflite"
+    map_path    = base / "model" / "vocab_map.json"
     format_path = base / "model" / "vocab_format.parquet"
 
-    TF_MODEL = None
-    ORD2SIGN = {}
-    SIGN2ID  = {}
-    ASL_VIDREF = {}
-    ROWS_PER_FRAME = None
-    FORMAT_DF = None
-    MODEL_ERROR = None
+    # Reset everything before (re)load so partial state never leaks
+    TF_MODEL = None; ORD2SIGN = {}; SIGN2ID = {}
+    ASL_VIDREF = {}; YT_EMBED = {}
+    ROWS_PER_FRAME = None; MODEL_ERROR = None
+    GROUP_IDX = {}; NOSE_ROW = None
 
     if not all(p.exists() for p in (model_path, map_path, format_path)):
         MODEL_ERROR = "Missing model files"
         print(f"[ERROR] {MODEL_ERROR}")
         return
 
+    # ── TFLite model ──────────────────────────────────────────────────────────
     try:
-        from tensorflow.lite.python.interpreter import Interpreter
-        interp = Interpreter(model_path=str(model_path), num_threads=8)
+        try:
+            from tflite_runtime.interpreter import Interpreter
+        except ImportError:
+            from tensorflow.lite.python.interpreter import Interpreter
+        interp   = Interpreter(model_path=str(model_path), num_threads=8)
         TF_MODEL = interp.get_signature_runner("serving_default")
-        print(f"[OK] Model loaded — vocab_model_hoyso48.tflite")
+        print(f"[OK] Model loaded — {model_path.name}")
     except Exception as e:
         MODEL_ERROR = str(e)
         print(f"[ERROR] Model load: {e}")
         return
 
+    # ── Sign map ──────────────────────────────────────────────────────────────
     try:
         with open(map_path, encoding="utf-8") as f:
             raw = json.load(f)
-        ORD2SIGN   = {int(k): v["sign"]                    for k, v in raw.items()}
-        SIGN2ID    = {v["sign"].lower(): int(k)            for k, v in raw.items()}
-        ASL_VIDREF = {int(k): v.get("asl_vidref", "")     for k, v in raw.items()}
-        YT_EMBED   = {int(k): v.get("yt_embedId", "")     for k, v in raw.items()}
+        ORD2SIGN   = {int(k): v["sign"]                for k, v in raw.items()}
+        SIGN2ID    = {v["sign"].lower(): int(k)        for k, v in raw.items()}
+        ASL_VIDREF = {int(k): v.get("asl_vidref", "") for k, v in raw.items()}
+        YT_EMBED   = {int(k): v.get("yt_embedId", "") for k, v in raw.items()}
         print(f"[OK] Sign map — {len(ORD2SIGN)} signs")
     except Exception as e:
         MODEL_ERROR = str(e)
         print(f"[ERROR] Sign map: {e}")
         return
-    print("Does 'hello' exist in vocab?", "hello" in SIGN2ID)
-    print("Sample signs:", list(ORD2SIGN.values())[:20])
+
+    # ── Landmark format — precompute numpy lookup arrays ──────────────────────
+    # This eliminates the DataFrame merge + row-by-row construction on every frame
     try:
-        FORMAT_DF = pd.read_parquet(format_path)
-        ROWS_PER_FRAME = len(FORMAT_DF)
-        print(f"[OK] Format loaded — {ROWS_PER_FRAME} landmarks/frame (exact original template)")
+        fmt            = pd.read_parquet(format_path)
+        ROWS_PER_FRAME = len(fmt)
+        groups         = fmt["type"].to_numpy()
+        indices        = fmt["landmark_index"].to_numpy()
+
+        for group in _GROUP_TO_KEY:
+            mask            = groups == group
+            rows            = np.where(mask)[0]
+            idx             = indices[mask].copy()
+            GROUP_IDX[group] = (rows, idx)
+
+        # Nose landmark (face, index 1) — precompute row for centering
+        nose_mask = (groups == "face") & (indices == 1)
+        NOSE_ROW  = int(np.argmax(nose_mask)) if nose_mask.any() else None
+
+        breakdown = {g: int((groups == g).sum()) for g in _GROUP_TO_KEY}
+        print(f"[OK] Format — {ROWS_PER_FRAME} landmarks/frame | nose={NOSE_ROW} | {breakdown}")
     except Exception as e:
         MODEL_ERROR = str(e)
         print(f"[ERROR] Format: {e}")
+        TF_MODEL = None
 
 
 load_model()
 
 
-# ── Exact original preprocessing from asl-practice-app ──────────────────────
-def create_vocab_framedata_df(landmarks_dict: dict) -> np.ndarray | None:
-    if FORMAT_DF is None or TF_MODEL is None or ROWS_PER_FRAME is None:
+# ── Frame processing — pure numpy, zero pandas in hot path ────────────────────
+def build_frame_array(landmarks_dict: dict) -> np.ndarray | None:
+    """Convert one MediaPipe Holistic frame → (ROWS_PER_FRAME, 3) float32."""
+    if TF_MODEL is None or ROWS_PER_FRAME is None or not GROUP_IDX:
         return None
 
-    rows = []
+    out = np.zeros((ROWS_PER_FRAME, 3), dtype=np.float32)
+
     for group, key in _GROUP_TO_KEY.items():
         lm_list = landmarks_dict.get(key)
         if not lm_list:
             continue
-        for i, lm in enumerate(lm_list):
-            rows.append({
-                "type": group,
-                "landmark_index": i,
-                "x": lm.get("x", 0.0),
-                "y": lm.get("y", 0.0),
-                "z": lm.get("z", 0.0),
-            })
+        rows, indices = GROUP_IDX[group]
+        arr   = np.asarray(
+            [[p.get("x", 0.0), p.get("y", 0.0), p.get("z", 0.0)] for p in lm_list],
+            dtype=np.float32,
+        )
+        valid = indices < len(arr)
+        out[rows[valid]] = arr[indices[valid]]
 
-    if not rows:
+    # Nose-centred normalisation — position/distance invariant
+    if NOSE_ROW is not None:
+        out -= out[NOSE_ROW].copy()
+
+    return out
+
+
+# ── Inference ─────────────────────────────────────────────────────────────────
+def infer_probs(seq: np.ndarray) -> np.ndarray | None:
+    if TF_MODEL is None or ROWS_PER_FRAME is None:
         return None
-
-    df = pd.DataFrame(rows)
-    merged = FORMAT_DF.merge(df, on=["type", "landmark_index"], how="left")
-    merged[["x", "y", "z"]] = merged[["x", "y", "z"]].fillna(0.0)
-
-    # Nose centering
-    nose_row = merged[(merged["type"] == "face") & (merged["landmark_index"] == 1)]
-    if not nose_row.empty:
-        nose = nose_row[["x", "y", "z"]].values[0]
-        merged[["x", "y", "z"]] -= nose
-
-    # Reshape with explicit guard (fixes Pylance error)
-    array = merged[["x", "y", "z"]].values.astype(np.float32)
-    return array.reshape(1, ROWS_PER_FRAME, 3)
-
-
-def infer_probs(seq: np.ndarray):
-    if TF_MODEL is None:
+    if seq.ndim != 3 or seq.shape[1] != ROWS_PER_FRAME or seq.shape[2] != 3:
+        print(f"[ERROR] Bad shape {seq.shape}, expected (n, {ROWS_PER_FRAME}, 3)")
         return None
+    if not seq.flags.c_contiguous or seq.dtype != np.float32:
+        seq = np.ascontiguousarray(seq, dtype=np.float32)
     try:
-        raw = TF_MODEL(inputs=seq)
+        raw   = TF_MODEL(inputs=seq)
         probs = np.asarray(raw["outputs"], dtype=np.float32)
         if probs.ndim == 2:
             probs = probs[0]
-        if not (probs.min() >= 0 and probs.max() <= 1 and abs(probs.sum() - 1) < 0.01):
-            shifted = probs - probs.max()
-            probs = np.exp(shifted) / (np.exp(shifted).sum() + 1e-9)
-        return probs
+        # Auto-detect softmax vs raw logits
+        if probs.min() >= 0 and probs.max() <= 1 and abs(float(probs.sum()) - 1.0) < 0.01:
+            return probs
+        shifted = probs - probs.max()
+        exp     = np.exp(shifted)
+        return exp / (exp.sum() + 1e-9)
     except Exception as e:
         print(f"[ERROR] Inference: {e}")
         return None
 
 
-def top_k_from_probs(probs: np.ndarray, k: int = 5):
+def top_k_from_probs(probs: np.ndarray, k: int = 5) -> list[dict]:
+    k   = min(k, probs.size)
     idx = np.argpartition(probs, -k)[-k:]
     idx = idx[np.argsort(probs[idx])[::-1]]
-    return [{"sign": ORD2SIGN.get(int(i), "UNKNOWN"), "confidence": round(float(probs[i]), 4)} for i in idx]
+    return [
+        {"sign": ORD2SIGN.get(int(i), "UNKNOWN"), "confidence": round(float(probs[i]), 4)}
+        for i in idx
+    ]
 
 
+# ── Sign buffer ───────────────────────────────────────────────────────────────
 class SignBuffer:
-    def __init__(self, pause_threshold: float = 1.5):
-        self.signs: list[str] = []
-        self.last_sign_time = None
-        self.pause_threshold = pause_threshold
-        self._pending = None
-        self._count = 0
+    def __init__(self, pause_threshold: float = 1.5) -> None:
+        self.signs:           list[str]    = []
+        self.last_sign_time:  float | None = None
+        self.pause_threshold               = pause_threshold
+        self._pending:        str | None   = None   # FIX: typed None not int 0
+        self._count:          int          = 0
 
-    def add(self, sign: str):
-        now = time.monotonic()
-        if self.last_sign_time and now - self.last_sign_time > self.pause_threshold and self.signs:
-            flushed = list(self.signs)
-            self.signs = []
-            self._pending = self._count = 0
-            return flushed
+    def add(self, sign: str) -> list[str] | None:
+        now     = time.monotonic()
+        flushed = None
+
+        if (
+            self.last_sign_time is not None
+            and now - self.last_sign_time > self.pause_threshold
+            and self.signs
+        ):
+            flushed          = list(self.signs)
+            self.signs       = []
+            self._pending    = None   # FIX: was = 0, made consecutive logic skip first hit
+            self._count      = 0
+            return flushed            # return immediately after flush
+
         if sign == self._pending:
             self._count += 1
         else:
             self._pending = sign
-            self._count = 1
-        if self._count >= GATES["consecutive"]:
+            self._count   = 1
+
+        if self._count >= int(GATES["consecutive"]):
             if not self.signs or self.signs[-1] != sign:
                 self.signs.append(sign)
-            self._count = 0
+            self._count         = 0
             self.last_sign_time = now
-        return None
 
-    def force_flush(self):
-        result = list(self.signs)
-        self.signs = []
+        return flushed
+
+    def force_flush(self) -> list[str]:
+        result              = list(self.signs)
+        self.signs          = []
         self.last_sign_time = None
-        self._pending = self._count = 0
+        self._pending       = None
+        self._count         = 0
         return result
 
 
-def gloss_to_sentence(signs: list[str]):
-    words = [s.replace("-", " ").lower() for s in signs]
-    deduped = []
-    for w in words:
-        if not deduped or deduped[-1] != w:
-            deduped.append(w)
-    return " ".join(deduped).capitalize() + "."
+def gloss_to_sentence(signs: list[str]) -> str:
+    words: list[str] = []
+    for s in signs:
+        w = s.replace("-", " ").lower()
+        if not words or words[-1] != w:
+            words.append(w)
+    return " ".join(words).capitalize() + "."
 
 
+# ── REST endpoints ────────────────────────────────────────────────────────────
 @app.get("/status")
 def status():
-    return {"model_loaded": TF_MODEL is not None, "model": "vocab_model_hoyso48.tflite", "num_signs": len(ORD2SIGN)}
-
-
-connected: dict[str, dict] = {}
+    return {
+        "model_loaded":   TF_MODEL is not None,
+        "model":          "vocab_model_hoyso48.tflite",
+        "num_signs":      len(ORD2SIGN),
+        "rows_per_frame": ROWS_PER_FRAME,
+        "error":          MODEL_ERROR,
+        "gating":         GATES,
+    }
 
 
 @app.get("/vocab")
 def vocab_list():
-    """Full vocabulary with SignASL video IDs for the Learn page."""
+    """Full vocabulary with video IDs for the Learn and Sign pages."""
     return {
         "signs": [
             {
@@ -222,31 +274,37 @@ def vocab_list():
         ]
     }
 
-# ── Text → Sign endpoint ──────────────────────────────────────────────────────
-from pydantic import BaseModel
-import re as _re
+
+# ── Text → Sign ───────────────────────────────────────────────────────────────
+_NORM: dict[str, str] = {
+    "i'm": "i", "you're": "you", "don't": "no",
+    "cant": "can", "can't": "can", "won't": "stop",
+}
 
 class TextToSignRequest(BaseModel):
     text: str
-
 @app.post("/text-to-sign")
-def text_to_sign(req: TextToSignRequest):
+def text_to_sign(req: TextToSignRequest) -> dict:
     """Tokenise text, look each word up in the sign vocabulary."""
     raw = (req.text or "").strip()
     if not raw:
         return {"results": [], "input": raw}
 
+    # Define NORM inside the function
     NORM = {
         "i'm": "i", "you're": "you", "don't": "no",
         "cant": "can", "can't": "can", "won't": "stop",
     }
 
-    tokens = _re.findall(r"[a-z'\-]+", raw.lower())
+    tokens = re.findall(r"[a-z'\-]+", raw.lower())
     results = []
+
     for token in tokens:
         word = NORM.get(token, token)
         assert word is not None
         sid = SIGN2ID.get(word)
+
+        # Singular / plural fallback
         if sid is None and word.endswith("s"):
             sid = SIGN2ID.get(word[:-1])
         if sid is None and not word.endswith("s"):
@@ -254,76 +312,94 @@ def text_to_sign(req: TextToSignRequest):
 
         if sid is not None:
             results.append({
-                "word":      token,
-                "sign":      ORD2SIGN[sid],
+                "word":       token,
+                "sign":       ORD2SIGN[sid],
                 "asl_vidref": ASL_VIDREF.get(sid, ""),
                 "yt_embedId": YT_EMBED.get(sid, ""),
-                "found":     True,
+                "found":      True,
             })
         else:
-            results.append({"word": token, "sign": None,
-                            "asl_vidref": "", "yt_embedId": "", "found": False})
+            results.append({
+                "word": token, "sign": None,
+                "asl_vidref": "", "yt_embedId": "", "found": False,
+            })
 
     return {"results": results, "input": raw}
 
+# ── WebSocket ─────────────────────────────────────────────────────────────────
+connected: dict[str, dict] = {}
+
+
 @app.websocket("/ws/{client_id}")
-async def websocket_endpoint(websocket: WebSocket, client_id: str):
+async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
     await websocket.accept()
-    state = {
-        "frames": deque(maxlen=MAX_FRAMES),
-        "buf": SignBuffer(),
+    state: dict = {
+        "frames":       deque(maxlen=MAX_FRAMES),
+        "buf":          SignBuffer(),
         "prev_hand_xy": None,
-        "motion_thr": GATES["motion"],
+        "motion_thr":   float(GATES["motion"]),
     }
     connected[client_id] = state
 
     try:
         while True:
-            data = await websocket.receive_json()
+            data   = await websocket.receive_json()
             action = data.get("action")
 
+            # ── Frame ─────────────────────────────────────────────────────────
             if action == "frame":
+                if TF_MODEL is None or ROWS_PER_FRAME is None:
+                    continue
+
                 lm = data.get("landmarks", {})
-                lh = lm.get("leftHandLandmarks") or []
+                lh = lm.get("leftHandLandmarks")  or []
                 rh = lm.get("rightHandLandmarks") or []
                 if not lh and not rh:
                     continue
 
                 curr_xy = np.array([[p["x"], p["y"]] for p in lh + rh], dtype=np.float32)
-                prev = state["prev_hand_xy"]
+                prev    = state["prev_hand_xy"]
                 if prev is not None and prev.shape == curr_xy.shape:
                     if float(np.mean(np.abs(curr_xy - prev))) < state["motion_thr"]:
                         state["prev_hand_xy"] = curr_xy
                         continue
                 state["prev_hand_xy"] = curr_xy
 
-                frame_arr = create_vocab_framedata_df(lm)
+                frame_arr = build_frame_array(lm)
                 if frame_arr is not None:
-                    state["frames"].append(frame_arr[0])
+                    state["frames"].append(frame_arr)
 
+            # ── Predict ───────────────────────────────────────────────────────
             elif action == "predict":
-                if not state["frames"] or TF_MODEL is None:
-                    await websocket.send_json({"type": "prediction", "sign": None, "confidence": 0.0, "buffer": state["buf"].signs})
+                frames = state["frames"]
+                if not frames or TF_MODEL is None:
+                    await websocket.send_json({
+                        "type": "prediction", "sign": None,
+                        "confidence": 0.0, "gate": "no_frames",
+                        "buffer": state["buf"].signs, "top5": [],
+                    })
                     continue
 
-                seq = np.stack(state["frames"], axis=0)
+                seq   = np.stack(frames, axis=0)
                 probs = infer_probs(seq)
                 if probs is None:
-                    await websocket.send_json({"type": "prediction", "sign": None, "confidence": 0.0, "buffer": state["buf"].signs})
+                    await websocket.send_json({
+                        "type": "prediction", "sign": None,
+                        "confidence": 0.0, "gate": "inference_error",
+                        "buffer": state["buf"].signs, "top5": [],
+                    })
                     continue
 
-                top_id = int(np.argmax(probs))
+                top_id   = int(np.argmax(probs))
                 top_prob = float(probs[top_id])
 
-                top3 = top_k_from_probs(probs, 3)
-                print(f"[DEBUG] Frames={len(state['frames'])} | Top3 → {[(t['sign'], round(t['confidence'],4)) for t in top3]}")
-
-                # Margin gate
+                # Top-2 margin gate
                 top2   = np.partition(probs, -2)[-2:] if probs.size > 1 else probs
                 margin = float(top2[1] - top2[0])     if probs.size > 1 else 1.0
 
-                committed = None
-                gate      = None
+                gate:      str | None = None
+                committed: str | None = None
+
                 if top_prob < float(GATES["confidence"]):
                     gate = "low_confidence"
                 elif margin < float(GATES["margin"]):
@@ -332,12 +408,13 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                     sign = ORD2SIGN.get(top_id)
                     if sign:
                         committed = sign
-                        flushed = state["buf"].add(committed)
+                        flushed   = state["buf"].add(committed)
                         if flushed:
                             await websocket.send_json({
-                                "type": "sentence",
+                                "type":     "sentence",
                                 "sentence": gloss_to_sentence(flushed),
-                                "gloss": " ".join(flushed),
+                                "gloss":    " ".join(flushed),
+                                "signs":    flushed,
                             })
 
                 await websocket.send_json({
@@ -350,16 +427,20 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                     "top5":       top_k_from_probs(probs, 5),
                 })
 
+            # ── Flush ─────────────────────────────────────────────────────────
             elif action == "flush":
-                flushed = state["buf"].force_flush()
-                state["frames"].clear()
+                flushed             = state["buf"].force_flush()
+                state["frames"]     = deque(maxlen=MAX_FRAMES)
+                state["prev_hand_xy"] = None
                 if flushed:
                     await websocket.send_json({
-                        "type": "sentence",
+                        "type":     "sentence",
                         "sentence": gloss_to_sentence(flushed),
-                        "gloss": " ".join(flushed),
+                        "gloss":    " ".join(flushed),
+                        "signs":    flushed,
                     })
 
+            # ── Threshold tuning ───────────────────────────────────────────────
             elif action == "set_threshold":
                 for key in ("confidence", "margin", "motion"):
                     if key in data:
@@ -374,3 +455,4 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 
     except WebSocketDisconnect:
         connected.pop(client_id, None)
+        print(f"[WS] {client_id} disconnected")
