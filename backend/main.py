@@ -79,7 +79,7 @@ def load_model() -> None:
             from tflite_runtime.interpreter import Interpreter
         except ImportError:
             from tensorflow.lite.python.interpreter import Interpreter
-        interp   = Interpreter(model_path=str(model_path), num_threads=8)
+        interp   = Interpreter(model_path=str(model_path), num_threads=2)
         TF_MODEL = interp.get_signature_runner("serving_default")
         print(f"[OK] Model loaded — {model_path.name}")
     except Exception as e:
@@ -458,3 +458,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
     except WebSocketDisconnect:
         connected.pop(client_id, None)
         print(f"[WS] {client_id} disconnected")
+
+from fastapi.staticfiles import StaticFiles
+app.mount("/", StaticFiles(directory=str(Path(__file__).resolve().parent.parent / "frontend"), html=True), name="static")
+        

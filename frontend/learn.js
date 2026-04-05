@@ -5,7 +5,8 @@
  */
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const API_BASE       = localStorage.getItem('ht_backend') || 'http://localhost:8000';
+// REPLACE WITH:
+const API_BASE       = localStorage.getItem('ht_backend') || window.location.origin;
 const WS_BASE        = API_BASE.replace(/^https/, 'wss').replace(/^http/, 'ws');
 const LEARN_ID       = 'learn_' + Math.random().toString(36).slice(2);
 const REQUIRED_HITS  = 3;      // consecutive correct predictions to pass

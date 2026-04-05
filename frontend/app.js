@@ -37,8 +37,14 @@ const CONFETTI_COLORS = ['#29c49a', '#4dd9b4', '#1a9e7c', '#a8f0dc', '#e8e8ec'];
 const $ = id => document.getElementById(id);
 
 function getApiBase() {
-  return $('backendUrl')?.value?.trim().replace(/\/$/, '') || 'http://localhost:8000';
+  const custom = $('backendUrl')?.value?.trim().replace(/\/$/, '');
+  if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    return (custom && custom !== 'http://localhost:8000') ? custom : window.location.origin;
+  }
+  return custom || 'http://localhost:8000';
 }
+
+
 function getWsBase() {
   return getApiBase().replace(/^https/, 'wss').replace(/^http/, 'ws');
 }
