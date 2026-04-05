@@ -454,5 +454,21 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
         print(f"[WS] {client_id} disconnected")
 
 from fastapi.staticfiles import StaticFiles
-app.mount("/", StaticFiles(directory=str(Path(__file__).resolve().parent.parent / "frontend"), html=True), name="static")
+from fastapi.responses import FileResponse
+
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+
+@app.get("/", include_in_schema=False)
+async def serve_root():
+    return FileResponse(str(FRONTEND_DIR / "index.html"))
+
+@app.get("/sign.html", include_in_schema=False)
+async def serve_sign():
+    return FileResponse(str(FRONTEND_DIR / "sign.html"))
+
+@app.get("/learn.html", include_in_schema=False)
+async def serve_learn():
+    return FileResponse(str(FRONTEND_DIR / "learn.html"))
+
+app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="static")
         
