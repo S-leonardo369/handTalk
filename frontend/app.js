@@ -196,8 +196,8 @@ function connectWS() {
   ws.onopen = () => {
     setStatus('ok', 'Live');
     wsReconnectDelay = WS_RECONNECT_BASE;
-    // Sync confidence slider to backend on reconnect
-    wsSend(JSON.stringify({ action: 'set_threshold', confidence: hudConfThresh }));
+    // Sync confidence slider + motion threshold to backend on reconnect
+    wsSend(JSON.stringify({ action: 'set_threshold', confidence: hudConfThresh, motion: 0.003 }));
   };
 
   ws.onmessage = (e) => {
