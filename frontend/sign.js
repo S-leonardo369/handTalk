@@ -176,7 +176,7 @@ function buildCard(r, index) {
   const ytId = r.found && r.yt_embedId ? r.yt_embedId.trim() : '';
 
   const videoHTML = ytId
-    ? `<div class="yt-thumb" data-ytid="${ytId}" style="position:relative;width:100%;height:100%;cursor:pointer;background:#000;">
+    ? `<div class="yt-thumb" data-ytid="${ytId}" style="position:absolute;inset:0;cursor:pointer;background:#000;">
          <img src="https://img.youtube.com/vi/${ytId}/mqdefault.jpg"
               style="width:100%;height:100%;object-fit:cover;" alt="ASL ${r.sign}" loading="lazy">
          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;">
