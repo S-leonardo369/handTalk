@@ -21,11 +21,6 @@ const HOLISTIC_SCRIPT = 'https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5.16
 const DRAW_CONN = Object.freeze({ color: 'rgba(41,196,154,.35)', lineWidth: 1.5 });
 const DRAW_LM   = Object.freeze({ color: 'rgba(41,196,154,.8)',  lineWidth: 1, radius: 3 });
 
-// ── SignASL widget re-initialiser ─────────────────────────────────────────────
-// widgets.js runs on first load and converts existing blockquotes.
-// For dynamically injected blockquotes, we re-execute the script.
-
-
 
 // ── Categories (static mapping — no backend change needed) ────────────────────
 const CATEGORIES = {
@@ -178,20 +173,6 @@ const modalVideoSlot= document.getElementById('modalVideoSlot');
 const modalNoVideo  = document.getElementById('modalNoVideo');
 let   modalCurrentSign = null;
 
-function reloadSignASLWidget() {
-    // Remove existing SignASL script to avoid duplicates
-    const oldScript = document.querySelector('script[src="https://embed.signasl.org/widgets.js"]');
-    if (oldScript) oldScript.remove();
-    
-    // Re-inject the widget script
-    const newScript = document.createElement('script');
-    newScript.src = 'https://embed.signasl.org/widgets.js';
-    newScript.async = true;
-    newScript.charset = 'utf-8';
-    document.head.appendChild(newScript);
-}
-
-// REPLACE WITH:
 function openSignModal(sign, aslId) {
     modalCurrentSign = sign;
     modalSignName.textContent = sign.toUpperCase();
@@ -290,8 +271,6 @@ async function startCamera(videoEl, canvasEl, placeholderEl, onResults) {
   }
 
   await loadHolistic();
-
-  // ... rest of the function stays exactly the same ...
 
   let stream;
   try {

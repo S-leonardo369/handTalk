@@ -278,11 +278,6 @@ def vocab_list():
 
 
 # ── Text → Sign ───────────────────────────────────────────────────────────────
-_NORM: dict[str, str] = {
-    "i'm": "i", "you're": "you", "don't": "no",
-    "cant": "can", "can't": "can", "won't": "stop",
-}
-
 class TextToSignRequest(BaseModel):
     text: str
 @app.post("/text-to-sign")
@@ -303,7 +298,6 @@ def text_to_sign(req: TextToSignRequest) -> dict:
 
     for token in tokens:
         word = NORM.get(token, token)
-        assert word is not None
         sid = SIGN2ID.get(word)
 
         # Singular / plural fallback

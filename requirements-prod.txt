@@ -6,4 +6,4 @@ pyarrow==23.0.1
 pydantic==2.11.0
 websockets==15.0
 python-multipart==0.0.20
-tensorflow-cpu
+tflite-runtime
