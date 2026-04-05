@@ -227,8 +227,10 @@ function connectWS() {
 
 // ── Diagnostic HUD ────────────────────────────────────────────────────────────
 function updateDiagHUD(msg) {
+  const overlay = document.getElementById('debugOverlay');
+  if (overlay) overlay.style.display = 'block';
   if (gateLabel) {
-    gateLabel.textContent = msg.gate ? `⛔ ${msg.gate.replace(/_/g, ' ')}` : '';
+    gateLabel.textContent = msg.gate ? `⛔ ${msg.gate.replace(/_/g, ' ')}` : '✅ passed gates';
   }
   if (marginLabel && msg.margin != null) {
     marginLabel.textContent = `margin: ${(msg.margin * 100).toFixed(1)}%`;

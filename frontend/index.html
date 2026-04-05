@@ -119,6 +119,18 @@
     </div>
   </div>
 
+  <!-- Debug overlay — shows raw model output to help tune thresholds -->
+  <div id="debugOverlay" style="
+    position:fixed;bottom:80px;right:12px;z-index:300;
+    background:rgba(0,0,0,.82);border:1px solid rgba(255,255,255,.12);
+    border-radius:10px;padding:10px 14px;font-family:monospace;font-size:11px;
+    color:#ccc;min-width:170px;pointer-events:none;display:none;">
+    <div style="color:#29c49a;font-weight:bold;margin-bottom:6px">Model output</div>
+    <div id="gateLabel" style="color:#f87171;margin-bottom:4px;font-size:10px"></div>
+    <div id="marginLabel" style="color:#94a3b8;margin-bottom:6px;font-size:10px"></div>
+    <div id="top5Panel" style="display:flex;flex-direction:column;gap:3px"></div>
+  </div>
+
   <canvas id="celebrationCanvas" style="position:fixed;inset:0;pointer-events:none;z-index:200;display:none;"></canvas>
   <div class="toast" id="toast"></div>
 
