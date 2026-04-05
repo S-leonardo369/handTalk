@@ -76,9 +76,12 @@ def load_model() -> None:
     # ── TFLite model ──────────────────────────────────────────────────────────
     try:
         try:
-            from tflite_runtime.interpreter import Interpreter
+            from ai_edge_litert.interpreter import Interpreter
         except ImportError:
-            from tensorflow.lite.python.interpreter import Interpreter
+            try:
+                from tflite_runtime.interpreter import Interpreter
+            except ImportError:
+                from tensorflow.lite.python.interpreter import Interpreter
         interp   = Interpreter(model_path=str(model_path), num_threads=2)
         TF_MODEL = interp.get_signature_runner("serving_default")
         print(f"[OK] Model loaded — {model_path.name}")
