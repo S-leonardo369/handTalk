@@ -6,7 +6,7 @@
  */
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const API_BASE = localStorage.getItem('ht_backend') || 'http://localhost:8000';
+const API_BASE = localStorage.getItem('ht_backend') || window.location.origin;
 const MAX_CHARS = 300;
 const PLAY_DELAY_MS = 2800;   // ms between cards in Play All mode
 
