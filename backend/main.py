@@ -24,7 +24,7 @@ app.add_middleware(
 
 GATES: dict[str, float | int] = {
     "confidence": 0.30,
-    "margin":     0.10,   # require top sign to be 10% ahead of second-best
+    "margin":     0.06,   # top sign must be 6% ahead of second-best
     "consecutive": 3,
     "motion":     0.003,  # was 0.010 — captures static/slow signs that had ~0 frames
 }
