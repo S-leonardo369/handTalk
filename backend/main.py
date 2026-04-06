@@ -23,10 +23,10 @@ app.add_middleware(
 # ── Gates ─────────────────────────────────────────────────────────────────────
 
 GATES: dict[str, float | int] = {
-    "confidence": 0.30,
-    "margin":     0.06,   # top sign must be 6% ahead of second-best
+    "confidence": 0.15,   # lowered: NaN fix gives honest probs (real signs ~15-40%)
+    "margin":     0.03,   # lowered: NaN fix sharpens real predictions, flattens noise
     "consecutive": 3,
-    "motion":     0.003,  # was 0.010 — captures static/slow signs that had ~0 frames
+    "motion":     0.003,  # captures static/slow signs
 }
 
 MAX_FRAMES = 80
@@ -118,12 +118,10 @@ def load_model() -> None:
             idx             = indices[mask].copy()
             GROUP_IDX[group] = (rows, idx)
 
-        # Nose landmark (face, index 1) — precompute row for centering
-        nose_mask = (groups == "face") & (indices == 1)
-        NOSE_ROW  = int(np.argmax(nose_mask)) if nose_mask.any() else None
+        # (Nose row no longer needed — model normalises internally)
 
         breakdown = {g: int((groups == g).sum()) for g in _GROUP_TO_KEY}
-        print(f"[OK] Format — {ROWS_PER_FRAME} landmarks/frame | nose={NOSE_ROW} | {breakdown}")
+        print(f"[OK] Format — {ROWS_PER_FRAME} landmarks/frame | {breakdown}")
     except Exception as e:
         MODEL_ERROR = str(e)
         print(f"[ERROR] Format: {e}")
@@ -135,27 +133,40 @@ load_model()
 
 # ── Frame processing — pure numpy, zero pandas in hot path ────────────────────
 def build_frame_array(landmarks_dict: dict) -> np.ndarray | None:
-    """Convert one MediaPipe Holistic frame → (ROWS_PER_FRAME, 3) float32."""
+    """Convert one MediaPipe Holistic frame → (ROWS_PER_FRAME, 3) float32.
+
+    Missing landmark groups are left as NaN (not zero).  The TFLite model
+    has an internal Preprocess layer that:
+      1. Selects 118 of 543 landmarks (76 face + 21 L-hand + 21 R-hand)
+      2. Centers on face landmark #17 (lip center)
+      3. Z-score normalises with NaN-aware mean/std
+      4. Computes velocity & acceleration features
+      5. Replaces NaN → 0  *after*  normalisation
+    So we must feed raw MediaPipe coordinates with NaN for anything missing.
+    """
     if TF_MODEL is None or ROWS_PER_FRAME is None or not GROUP_IDX:
         return None
 
-    out = np.zeros((ROWS_PER_FRAME, 3), dtype=np.float32)
+    # NaN = "not observed".  The model's internal NaN-aware normalisation
+    # will skip these, then zero-fill after normalisation.  Using 0.0 here
+    # would trick the model into seeing phantom landmarks at the origin.
+    out = np.full((ROWS_PER_FRAME, 3), np.nan, dtype=np.float32)
 
     for group, key in _GROUP_TO_KEY.items():
         lm_list = landmarks_dict.get(key)
         if not lm_list:
-            continue
+            continue                       # whole group missing → stays NaN
         rows, indices = GROUP_IDX[group]
-        arr   = np.asarray(
+        arr = np.asarray(
             [[p.get("x", 0.0), p.get("y", 0.0), p.get("z", 0.0)] for p in lm_list],
             dtype=np.float32,
         )
         valid = indices < len(arr)
         out[rows[valid]] = arr[indices[valid]]
 
-    # Nose-centred normalisation — position/distance invariant
-    if NOSE_ROW is not None:
-        out -= out[NOSE_ROW].copy()
+    # NO nose-centering here — the model normalises internally using
+    # face landmark #17 with NaN-aware z-score.  Pre-centering with a
+    # different point (nose #1) would double-normalise and shift coords.
 
     return out
 
