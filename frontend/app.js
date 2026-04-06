@@ -230,7 +230,8 @@ function updateDiagHUD(msg) {
   const overlay = document.getElementById('debugOverlay');
   if (overlay) overlay.style.display = 'block';
   if (gateLabel) {
-    gateLabel.textContent = msg.gate ? `⛔ ${msg.gate.replace(/_/g, ' ')}` : '✅ passed gates';
+    const frames = msg.n_frames != null ? ` (${msg.n_frames}f)` : '';
+    gateLabel.textContent = msg.gate ? `⛔ ${msg.gate.replace(/_/g, ' ')}${frames}` : `✅ passed gates${frames}`;
   }
   if (marginLabel && msg.margin != null) {
     marginLabel.textContent = `margin: ${(msg.margin * 100).toFixed(1)}%`;
@@ -285,16 +286,14 @@ async function initHolistic() {
 
 // ── Pack landmarks ────────────────────────────────────────────────────────────
 /**
- * FIX: Always include ALL four landmark groups on every frame.
+ * Always include ALL four landmark groups on every frame.
  *
- * Previous version omitted faceLandmarks from regular frames to save bandwidth,
- * but the backend nose-centres every frame using face landmark #1.
- * Without face, nose = (0,0,0) so no centring happened on 14 out of every 15
- * frames — producing an inconsistent feature window going into the model.
+ * The TFLite model's internal Preprocess layer selects 118 of 543 landmarks
+ * (76 face + 21 left hand + 21 right hand) and uses face landmark #17 for
+ * normalization.  Missing groups must arrive as absent keys so the backend
+ * fills them with NaN (the model's NaN-aware normalisation handles this).
  *
- * Bandwidth cost: face adds ~468 × 3 floats ≈ 11KB/frame at 30fps = ~330KB/s.
- * This is acceptable on a local WebSocket. If bandwidth becomes a concern,
- * implement centring in the frontend instead and strip face before sending.
+ * Bandwidth cost: ~11KB/frame at 30fps = ~330KB/s.  Acceptable on WebSocket.
  */
 function packLandmarks(res) {
   const o = {};

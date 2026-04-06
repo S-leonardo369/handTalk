@@ -23,13 +23,14 @@ app.add_middleware(
 # ── Gates ─────────────────────────────────────────────────────────────────────
 
 GATES: dict[str, float | int] = {
-    "confidence": 0.15,   # lowered: NaN fix gives honest probs (real signs ~15-40%)
-    "margin":     0.03,   # lowered: NaN fix sharpens real predictions, flattens noise
+    "confidence": 0.15,   # NaN fix gives honest probs (real signs ~15-40%)
+    "margin":     0.03,   # NaN fix sharpens real predictions, flattens noise
     "consecutive": 3,
     "motion":     0.003,  # captures static/slow signs
 }
 
-MAX_FRAMES = 80
+MAX_FRAMES    = 256       # model trained with MAX_LEN=384; keep generous window
+MIN_FRAMES    = 8         # need at least this many before inference makes sense
 
 # ── Globals ───────────────────────────────────────────────────────────────────
 TF_MODEL        = None
@@ -348,6 +349,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
         "buf":          SignBuffer(),
         "prev_hand_xy": None,
         "motion_thr":   float(GATES["motion"]),
+        "has_motion":   False,    # any motion seen since last predict?
     }
     connected[client_id] = state
 
@@ -367,12 +369,14 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
                 if not lh and not rh:
                     continue
 
+                # Track motion for the motion gate — but ALWAYS store the
+                # frame.  The model's internal velocity/acceleration features
+                # need the full temporal sequence, including pauses.
                 curr_xy = np.array([[p["x"], p["y"]] for p in lh + rh], dtype=np.float32)
                 prev    = state["prev_hand_xy"]
                 if prev is not None and prev.shape == curr_xy.shape:
-                    if float(np.mean(np.abs(curr_xy - prev))) < state["motion_thr"]:
-                        state["prev_hand_xy"] = curr_xy
-                        continue
+                    if float(np.mean(np.abs(curr_xy - prev))) >= state["motion_thr"]:
+                        state["has_motion"] = True
                 state["prev_hand_xy"] = curr_xy
 
                 frame_arr = build_frame_array(lm)
@@ -382,6 +386,8 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
             # ── Predict ───────────────────────────────────────────────────────
             elif action == "predict":
                 frames = state["frames"]
+                n_frames = len(frames)
+
                 if not frames or TF_MODEL is None:
                     await websocket.send_json({
                         "type": "prediction", "sign": None,
@@ -390,7 +396,29 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
                     })
                     continue
 
+                if n_frames < MIN_FRAMES:
+                    await websocket.send_json({
+                        "type": "prediction", "sign": None,
+                        "confidence": 0.0, "gate": "too_few_frames",
+                        "buffer": state["buf"].signs, "top5": [],
+                    })
+                    continue
+
                 seq   = np.stack(frames, axis=0)
+
+                # Filter all-NaN frames (frames where all 118 key landmarks
+                # were missing).  The original training pipeline does this.
+                valid_mask = ~np.all(np.isnan(seq), axis=(1, 2))
+                seq = seq[valid_mask]
+                if seq.shape[0] < MIN_FRAMES:
+                    await websocket.send_json({
+                        "type": "prediction", "sign": None,
+                        "confidence": 0.0, "gate": "too_few_valid",
+                        "buffer": state["buf"].signs, "top5": [],
+                    })
+                    state["has_motion"] = False
+                    continue
+
                 probs = infer_probs(seq)
                 if probs is None:
                     await websocket.send_json({
@@ -419,6 +447,14 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
                     if sign:
                         committed = sign
                         flushed   = state["buf"].add(committed)
+
+                        # Clear frame buffer after committing a sign so the
+                        # next prediction starts from fresh motion, not stale
+                        # frames from the previous sign.
+                        if state["buf"]._count == 0:  # just hit consecutive threshold
+                            state["frames"].clear()
+                            state["has_motion"] = False
+
                         if flushed:
                             await websocket.send_json({
                                 "type":     "sentence",
@@ -427,12 +463,15 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
                                 "signs":    flushed,
                             })
 
+                state["has_motion"] = False
+
                 await websocket.send_json({
                     "type":       "prediction",
                     "sign":       committed,
                     "confidence": round(top_prob, 4),
                     "margin":     round(margin, 4),
                     "gate":       gate,
+                    "n_frames":   n_frames,
                     "buffer":     state["buf"].signs,
                     "top5":       top_k_from_probs(probs, 5),
                 })
