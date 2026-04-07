@@ -571,28 +571,9 @@ window.speechSynthesis?.getVoices();
 let demoRunning = false;
 let _vocabCache = null;  // cached sign names from /vocab
 
-async function getDemoSequence() {
-  if (!_vocabCache) {
-    try {
-      const r = await fetch(`${getApiBase()}/vocab`, { signal: AbortSignal.timeout(4000) });
-      const d = await r.json();
-      _vocabCache = (d.signs || []).map(s => s.sign.toUpperCase());
-    } catch {
-      // fallback if backend unreachable
-      _vocabCache = ['HELLO', 'NICE', 'MEET', 'LEARN', 'SIGN', 'GOOD', 'PLEASE', 'THANK-YOU'];
-    }
-  }
-  // Pick 8 random words from the full vocabulary
-  const pool = [..._vocabCache];
-  const picked = [];
-  while (picked.length < 8 && pool.length) {
-    const idx = Math.floor(Math.random() * pool.length);
-    picked.push(pool.splice(idx, 1)[0]);
-  }
-  return picked;
-}
+const DEMO_SEQUENCE = ['cloud', 'any', 'bye', 'apple', 'eye', 'cry', 'book', 'ear'];
 
-document.getElementById('btnDemo')?.addEventListener('click', async () => {
+document.getElementById('btnDemo')?.addEventListener('click', () => {
   settingsPanel?.classList.remove('open');
   startScreen?.classList.add('gone');
   controls?.classList.remove('hidden');
@@ -602,7 +583,7 @@ document.getElementById('btnDemo')?.addEventListener('click', async () => {
   clearAll();
   toast('Running demo…');
 
-  const seq = await getDemoSequence();
+  const seq = DEMO_SEQUENCE;
   let i = 0;
   const iv = setInterval(() => {
     if (i < seq.length) {
