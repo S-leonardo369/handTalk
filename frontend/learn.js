@@ -296,7 +296,7 @@ async function startCamera(videoEl, canvasEl, placeholderEl, onResults) {
     modelComplexity: 1, smoothLandmarks: true,
     enableSegmentation: false, smoothSegmentation: false,
     refineFaceLandmarks: false,
-    minDetectionConfidence: 0.4, minTrackingConfidence: 0.3,  // lower: prevents hand dropout when hands cross
+    minDetectionConfidence: 0.5, minTrackingConfidence: 0.5,
   });
   h.onResults(onResults);
 
@@ -474,18 +474,16 @@ const arenaVideoSlot   = document.getElementById('arenaVideoSlot');
 const sessionComplete  = document.getElementById('sessionComplete');
 const completeResults  = document.getElementById('completeResults');
 
-function buildQueue(signs, pinFirst = null) {
-  // Shuffle, but front-load weak signs.
-  // If pinFirst is set, guarantee that sign is queue[0].
-  const weak   = signs.filter(s => s !== pinFirst && progress.weak.includes(s));
-  const normal = signs.filter(s => s !== pinFirst && !progress.weak.includes(s));
+function buildQueue(signs) {
+  // Shuffle, but front-load weak signs
+  const weak   = signs.filter(s => progress.weak.includes(s));
+  const normal = signs.filter(s => !progress.weak.includes(s));
   const shuffle = arr => arr.sort(() => Math.random() - .5);
-  const rest = [...shuffle(weak), ...shuffle(normal)];
-  return pinFirst ? [pinFirst, ...rest] : rest;
+  return [...shuffle(weak), ...shuffle(normal)];
 }
 
-function startSession(signNames, pinFirst = null) {
-  session.queue      = buildQueue(signNames, pinFirst);
+function startSession(signNames) {
+  session.queue      = buildQueue(signNames);
   session.queueIndex = 0;
   session.results    = [];
   session.active     = true;
@@ -500,8 +498,8 @@ function startSession(signNames, pinFirst = null) {
 
 function startSinglePractice(sign) {
   switchTab('practice');
-  const rest = VOCAB.map(e => e.sign).filter(s => s !== sign && !progress.mastered.includes(s)).slice(0, 9);
-  startSession([sign, ...rest], sign);
+  const queue = [sign, ...VOCAB.map(e => e.sign).filter(s => s !== sign && !progress.mastered.includes(s)).slice(0, 9)];
+  startSession(queue.slice(0, Math.min(queue.length, 10)));
 }
 
 function loadPracticeSign(sign) {
