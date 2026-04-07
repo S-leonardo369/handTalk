@@ -568,10 +568,31 @@ if (confThresh)   hudConfThresh = parseInt(confThresh.value, 10) / 100;
 checkBackend();
 window.speechSynthesis?.getVoices();
 
-const DEMO_SEQUENCE = ['HELLO', 'NICE', 'MEET', 'LEARN', 'SIGN', 'GOOD', 'PLEASE', 'THANK-YOU'];
 let demoRunning = false;
+let _vocabCache = null;  // cached sign names from /vocab
 
-document.getElementById('btnDemo')?.addEventListener('click', () => {
+async function getDemoSequence() {
+  if (!_vocabCache) {
+    try {
+      const r = await fetch(`${getApiBase()}/vocab`, { signal: AbortSignal.timeout(4000) });
+      const d = await r.json();
+      _vocabCache = (d.signs || []).map(s => s.sign.toUpperCase());
+    } catch {
+      // fallback if backend unreachable
+      _vocabCache = ['HELLO', 'NICE', 'MEET', 'LEARN', 'SIGN', 'GOOD', 'PLEASE', 'THANK-YOU'];
+    }
+  }
+  // Pick 8 random words from the full vocabulary
+  const pool = [..._vocabCache];
+  const picked = [];
+  while (picked.length < 8 && pool.length) {
+    const idx = Math.floor(Math.random() * pool.length);
+    picked.push(pool.splice(idx, 1)[0]);
+  }
+  return picked;
+}
+
+document.getElementById('btnDemo')?.addEventListener('click', async () => {
   settingsPanel?.classList.remove('open');
   startScreen?.classList.add('gone');
   controls?.classList.remove('hidden');
@@ -581,16 +602,17 @@ document.getElementById('btnDemo')?.addEventListener('click', () => {
   clearAll();
   toast('Running demo…');
 
+  const seq = await getDemoSequence();
   let i = 0;
   const iv = setInterval(() => {
-    if (i < DEMO_SEQUENCE.length) {
-      updateHUD(DEMO_SEQUENCE[i], 0.82);
-      updateChips(DEMO_SEQUENCE.slice(0, i + 1));
+    if (i < seq.length) {
+      updateHUD(seq[i], 0.82);
+      updateChips(seq.slice(0, i + 1));
       i++;
     } else {
       clearInterval(iv);
-      const gloss    = DEMO_SEQUENCE.join(' ');
-      const sentence = DEMO_SEQUENCE.map(s => s.toLowerCase().replace(/-/g, ' ')).join(' ');
+      const gloss    = seq.join(' ');
+      const sentence = seq.map(s => s.toLowerCase().replace(/-/g, ' ')).join(' ');
       addSentence(sentence.charAt(0).toUpperCase() + sentence.slice(1) + '.', gloss);
       updateChips([]);
       demoRunning = false;
