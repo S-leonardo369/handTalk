@@ -23,14 +23,17 @@ app.add_middleware(
 # ── Gates ─────────────────────────────────────────────────────────────────────
 
 GATES: dict[str, float | int] = {
-    "confidence": 0.15,   # NaN fix gives honest probs (real signs ~15-40%)
-    "margin":     0.03,   # NaN fix sharpens real predictions, flattens noise
-    "consecutive": 3,
-    "motion":     0.003,  # captures static/slow signs
+    "confidence": 0.12,   # NaN+TTA gives well-calibrated probs; real signs ~12-50%
+    "margin":     0.02,   # TTA sharpens margin for real signs, flattens noise
+    "consecutive": 2,     # lower: TTA+EMA stabilise enough that 2 hits suffice
+    "motion":     0.002,  # very permissive; model needs full temporal sequence
 }
 
-MAX_FRAMES    = 256       # model trained with MAX_LEN=384; keep generous window
+MAX_FRAMES    = 256       # model trained with MAX_LEN=384; generous window
 MIN_FRAMES    = 8         # need at least this many before inference makes sense
+INFER_WINDOW  = 64        # use last N frames for inference (typical sign ~1-2s)
+EMA_ALPHA     = 0.55      # prediction smoothing: 55% new + 45% previous
+VIS_THRESHOLD = 0.3       # landmarks below this visibility → NaN
 
 # ── Globals ───────────────────────────────────────────────────────────────────
 TF_MODEL        = None
@@ -43,7 +46,12 @@ MODEL_ERROR:    str | None  = None
 
 # Precomputed at load time — eliminates pandas work in the hot path
 GROUP_IDX:  dict[str, tuple[np.ndarray, np.ndarray]] = {}
-NOSE_ROW:   int | None = None
+
+# TTA horizontal flip — precomputed swap arrays
+_FLIP_FACE_A: np.ndarray | None = None   # "left" face rows
+_FLIP_FACE_B: np.ndarray | None = None   # "right" face rows
+_FLIP_LH_ROWS: np.ndarray | None = None  # left-hand rows in 543-array
+_FLIP_RH_ROWS: np.ndarray | None = None  # right-hand rows in 543-array
 
 _GROUP_TO_KEY: dict[str, str] = {
     "face":       "faceLandmarks",
@@ -52,11 +60,29 @@ _GROUP_TO_KEY: dict[str, str] = {
     "right_hand": "rightHandLandmarks",
 }
 
+# Face landmark left↔right pairs (from MediaPipe face mesh / hoyso48 notebook)
+_FACE_LR_PAIRS: list[tuple[int, int]] = [
+    # Lips (LLIP ↔ RLIP)
+    (84, 314), (181, 405), (91, 321), (146, 375),
+    (61, 291), (185, 409), (40, 270), (39, 269),
+    (37, 267), (87, 317), (178, 402), (88, 318),
+    (95, 324), (78, 308), (191, 415), (80, 310),
+    (81, 311), (82, 312),
+    # Eyes (LEYE ↔ REYE)
+    (263, 33), (249, 7), (390, 163), (373, 144),
+    (374, 145), (380, 153), (381, 154), (382, 155),
+    (362, 133), (466, 246), (388, 161), (387, 160),
+    (386, 159), (385, 158), (384, 157), (398, 173),
+    # Nose
+    (98, 327),
+]
+
 
 # ── Model loading ─────────────────────────────────────────────────────────────
 def load_model() -> None:
     global TF_MODEL, ORD2SIGN, SIGN2ID, ASL_VIDREF, YT_EMBED
-    global ROWS_PER_FRAME, MODEL_ERROR, GROUP_IDX, NOSE_ROW
+    global ROWS_PER_FRAME, MODEL_ERROR, GROUP_IDX
+    global _FLIP_FACE_A, _FLIP_FACE_B, _FLIP_LH_ROWS, _FLIP_RH_ROWS
 
     base        = Path(__file__).resolve().parent
     model_path  = base / "model" / "vocab_model_hoyso48.tflite"
@@ -67,7 +93,8 @@ def load_model() -> None:
     TF_MODEL = None; ORD2SIGN = {}; SIGN2ID = {}
     ASL_VIDREF = {}; YT_EMBED = {}
     ROWS_PER_FRAME = None; MODEL_ERROR = None
-    GROUP_IDX = {}; NOSE_ROW = None
+    GROUP_IDX = {}
+    _FLIP_FACE_A = _FLIP_FACE_B = _FLIP_LH_ROWS = _FLIP_RH_ROWS = None
 
     if not all(p.exists() for p in (model_path, map_path, format_path)):
         MODEL_ERROR = "Missing model files"
@@ -106,7 +133,6 @@ def load_model() -> None:
         return
 
     # ── Landmark format — precompute numpy lookup arrays ──────────────────────
-    # This eliminates the DataFrame merge + row-by-row construction on every frame
     try:
         fmt            = pd.read_parquet(format_path)
         ROWS_PER_FRAME = len(fmt)
@@ -119,14 +145,26 @@ def load_model() -> None:
             idx             = indices[mask].copy()
             GROUP_IDX[group] = (rows, idx)
 
-        # (Nose row no longer needed — model normalises internally)
-
         breakdown = {g: int((groups == g).sum()) for g in _GROUP_TO_KEY}
         print(f"[OK] Format — {ROWS_PER_FRAME} landmarks/frame | {breakdown}")
     except Exception as e:
         MODEL_ERROR = str(e)
         print(f"[ERROR] Format: {e}")
         TF_MODEL = None
+        return
+
+    # ── TTA flip map ──────────────────────────────────────────────────────────
+    # Face landmarks are rows 0-467 with landmark_index == row index, so
+    # MediaPipe face landmark N → row N in the 543-array.
+    _FLIP_FACE_A = np.array([p[0] for p in _FACE_LR_PAIRS], dtype=np.intp)
+    _FLIP_FACE_B = np.array([p[1] for p in _FACE_LR_PAIRS], dtype=np.intp)
+
+    lh_rows, _ = GROUP_IDX.get("left_hand", (np.array([]), np.array([])))
+    rh_rows, _ = GROUP_IDX.get("right_hand", (np.array([]), np.array([])))
+    if len(lh_rows) == len(rh_rows) == 21:
+        _FLIP_LH_ROWS = lh_rows.astype(np.intp)
+        _FLIP_RH_ROWS = rh_rows.astype(np.intp)
+    print(f"[OK] TTA flip map — {len(_FACE_LR_PAIRS)} face pairs, hands={'yes' if _FLIP_LH_ROWS is not None else 'no'}")
 
 
 load_model()
@@ -149,8 +187,7 @@ def build_frame_array(landmarks_dict: dict) -> np.ndarray | None:
         return None
 
     # NaN = "not observed".  The model's internal NaN-aware normalisation
-    # will skip these, then zero-fill after normalisation.  Using 0.0 here
-    # would trick the model into seeing phantom landmarks at the origin.
+    # will skip these, then zero-fill after normalisation.
     out = np.full((ROWS_PER_FRAME, 3), np.nan, dtype=np.float32)
 
     for group, key in _GROUP_TO_KEY.items():
@@ -158,18 +195,49 @@ def build_frame_array(landmarks_dict: dict) -> np.ndarray | None:
         if not lm_list:
             continue                       # whole group missing → stays NaN
         rows, indices = GROUP_IDX[group]
+
         arr = np.asarray(
             [[p.get("x", 0.0), p.get("y", 0.0), p.get("z", 0.0)] for p in lm_list],
             dtype=np.float32,
         )
+
+        # Mark low-visibility landmarks as NaN (pose & face have visibility;
+        # hand landmarks don't, so they default to 1.0 and pass the check).
+        vis = np.array(
+            [p.get("visibility", 1.0) for p in lm_list], dtype=np.float32,
+        )
+        arr[vis < VIS_THRESHOLD] = np.nan
+
         valid = indices < len(arr)
         out[rows[valid]] = arr[indices[valid]]
 
-    # NO nose-centering here — the model normalises internally using
-    # face landmark #17 with NaN-aware z-score.  Pre-centering with a
-    # different point (nose #1) would double-normalise and shift coords.
-
     return out
+
+
+# ── TTA: horizontal flip ─────────────────────────────────────────────────────
+def _flip_sequence(seq: np.ndarray) -> np.ndarray:
+    """Horizontally mirror a (T, 543, 3) landmark sequence for TTA.
+
+    Mirrors x-coords and swaps left↔right face / hand landmarks so the
+    model sees a left-handed version of the same sign.
+    """
+    f = seq.copy()
+    # Mirror x (column 0).  NaN stays NaN: 1.0 - NaN = NaN.
+    f[:, :, 0] = 1.0 - f[:, :, 0]
+
+    # Swap left↔right face landmarks
+    if _FLIP_FACE_A is not None:
+        tmp = f[:, _FLIP_FACE_A, :].copy()
+        f[:, _FLIP_FACE_A, :] = f[:, _FLIP_FACE_B, :]
+        f[:, _FLIP_FACE_B, :] = tmp
+
+    # Swap left↔right hand rows
+    if _FLIP_LH_ROWS is not None:
+        tmp = f[:, _FLIP_LH_ROWS, :].copy()
+        f[:, _FLIP_LH_ROWS, :] = f[:, _FLIP_RH_ROWS, :]
+        f[:, _FLIP_RH_ROWS, :] = tmp
+
+    return f
 
 
 # ── Inference ─────────────────────────────────────────────────────────────────
@@ -197,6 +265,23 @@ def infer_probs(seq: np.ndarray) -> np.ndarray | None:
         return None
 
 
+def infer_with_tta(seq: np.ndarray) -> np.ndarray | None:
+    """Run inference with test-time augmentation (original + h-flip averaged).
+
+    This effectively doubles the training data the model has seen at inference
+    time, improving robustness for left-handed signers and reducing noise.
+    """
+    p_orig = infer_probs(seq)
+    if p_orig is None:
+        return None
+
+    p_flip = infer_probs(_flip_sequence(seq))
+    if p_flip is None:
+        return p_orig          # flip failed → fall back to original only
+
+    return (p_orig + p_flip) * 0.5
+
+
 def top_k_from_probs(probs: np.ndarray, k: int = 5) -> list[dict]:
     k   = min(k, probs.size)
     idx = np.argpartition(probs, -k)[-k:]
@@ -213,7 +298,7 @@ class SignBuffer:
         self.signs:           list[str]    = []
         self.last_sign_time:  float | None = None
         self.pause_threshold               = pause_threshold
-        self._pending:        str | None   = None   # FIX: typed None not int 0
+        self._pending:        str | None   = None
         self._count:          int          = 0
 
     def add(self, sign: str) -> list[str] | None:
@@ -227,9 +312,9 @@ class SignBuffer:
         ):
             flushed          = list(self.signs)
             self.signs       = []
-            self._pending    = None   # FIX: was = 0, made consecutive logic skip first hit
+            self._pending    = None
             self._count      = 0
-            return flushed            # return immediately after flush
+            return flushed
 
         if sign == self._pending:
             self._count += 1
@@ -302,7 +387,6 @@ def text_to_sign(req: TextToSignRequest) -> dict:
     if not raw:
         return {"results": [], "input": raw}
 
-    # Define NORM inside the function
     NORM = {
         "i'm": "i", "you're": "you", "don't": "no",
         "cant": "can", "can't": "can", "won't": "stop",
@@ -315,7 +399,6 @@ def text_to_sign(req: TextToSignRequest) -> dict:
         word = NORM.get(token, token)
         sid = SIGN2ID.get(word)
 
-        # Singular / plural fallback
         if sid is None and word.endswith("s"):
             sid = SIGN2ID.get(word[:-1])
         if sid is None and not word.endswith("s"):
@@ -349,7 +432,8 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
         "buf":          SignBuffer(),
         "prev_hand_xy": None,
         "motion_thr":   float(GATES["motion"]),
-        "has_motion":   False,    # any motion seen since last predict?
+        "has_motion":   False,
+        "ema_probs":    None,       # EMA-smoothed probability vector
     }
     connected[client_id] = state
 
@@ -369,9 +453,9 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
                 if not lh and not rh:
                     continue
 
-                # Track motion for the motion gate — but ALWAYS store the
-                # frame.  The model's internal velocity/acceleration features
-                # need the full temporal sequence, including pauses.
+                # Track motion — but ALWAYS store the frame.  The model's
+                # internal velocity/acceleration features need the full
+                # temporal sequence, including pauses.
                 curr_xy = np.array([[p["x"], p["y"]] for p in lh + rh], dtype=np.float32)
                 prev    = state["prev_hand_xy"]
                 if prev is not None and prev.shape == curr_xy.shape:
@@ -404,10 +488,11 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
                     })
                     continue
 
-                seq   = np.stack(frames, axis=0)
+                # ── Sliding window: use last INFER_WINDOW frames ──────────
+                window = list(frames)[-INFER_WINDOW:] if n_frames > INFER_WINDOW else list(frames)
+                seq = np.stack(window, axis=0)
 
-                # Filter all-NaN frames (frames where all 118 key landmarks
-                # were missing).  The original training pipeline does this.
+                # Filter all-NaN frames (matching training pipeline)
                 valid_mask = ~np.all(np.isnan(seq), axis=(1, 2))
                 seq = seq[valid_mask]
                 if seq.shape[0] < MIN_FRAMES:
@@ -419,7 +504,8 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
                     state["has_motion"] = False
                     continue
 
-                probs = infer_probs(seq)
+                # ── Inference with TTA (original + horizontal flip) ───────
+                probs = infer_with_tta(seq)
                 if probs is None:
                     await websocket.send_json({
                         "type": "prediction", "sign": None,
@@ -427,6 +513,12 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
                         "buffer": state["buf"].signs, "top5": [],
                     })
                     continue
+
+                # ── EMA smoothing across predict cycles ───────────────────
+                prev_ema = state["ema_probs"]
+                if prev_ema is not None and prev_ema.shape == probs.shape:
+                    probs = EMA_ALPHA * probs + (1.0 - EMA_ALPHA) * prev_ema
+                state["ema_probs"] = probs
 
                 top_id   = int(np.argmax(probs))
                 top_prob = float(probs[top_id])
@@ -448,12 +540,12 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
                         committed = sign
                         flushed   = state["buf"].add(committed)
 
-                        # Clear frame buffer after committing a sign so the
-                        # next prediction starts from fresh motion, not stale
-                        # frames from the previous sign.
-                        if state["buf"]._count == 0:  # just hit consecutive threshold
+                        # Clear frame buffer + EMA after committing a sign
+                        # so the next prediction starts from fresh motion.
+                        if state["buf"]._count == 0:
                             state["frames"].clear()
                             state["has_motion"] = False
+                            state["ema_probs"]  = None
 
                         if flushed:
                             await websocket.send_json({
@@ -481,6 +573,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
                 flushed             = state["buf"].force_flush()
                 state["frames"]     = deque(maxlen=MAX_FRAMES)
                 state["prev_hand_xy"] = None
+                state["ema_probs"]  = None
                 if flushed:
                     await websocket.send_json({
                         "type":     "sentence",
@@ -524,4 +617,3 @@ async def serve_learn():
     return FileResponse(str(FRONTEND_DIR / "learn.html"))
 
 app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="static")
-        
