@@ -595,7 +595,7 @@ document.getElementById('btnDemo')?.addEventListener('click', () => {
       updateChips([]);
       demoRunning = false;
     }
-  }, 3369);
+  }, 10000);
 });
 
 
