@@ -276,8 +276,8 @@ async function initHolistic() {
     enableSegmentation:     false,
     smoothSegmentation:     false,
     refineFaceLandmarks:    false,  // saves GPU, not needed for sign recognition
-    minDetectionConfidence: 0.5,
-    minTrackingConfidence:  0.5,
+    minDetectionConfidence: 0.4,   // lower: keeps detecting hands during overlap
+    minTrackingConfidence:  0.3,   // lower: prevents hand dropout when hands cross
   });
 
   holistic.onResults(onHolisticResults);

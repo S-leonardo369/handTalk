@@ -170,6 +170,61 @@ def load_model() -> None:
 load_model()
 
 
+# ── NaN interpolation for short hand dropouts ────────────────────────────────
+def interpolate_nan_gaps(seq: np.ndarray, max_gap: int = 3) -> np.ndarray:
+    """Fill short NaN gaps in a (T, 543, 3) sequence via linear interpolation.
+
+    When MediaPipe briefly loses a hand (1–3 frames) because hands overlap,
+    we get NaN rows that damage the model's velocity/acceleration features.
+    This fills gaps of ≤max_gap frames using the surrounding valid frames.
+    Longer gaps (hand genuinely absent) stay NaN — the model handles those.
+    """
+    if seq.shape[0] < 3:
+        return seq
+
+    out = seq.copy()
+    T = out.shape[0]
+
+    # Work on left-hand and right-hand row ranges only (the most affected)
+    for group in ("left_hand", "right_hand"):
+        rows, _ = GROUP_IDX.get(group, (np.array([]), np.array([])))
+        if len(rows) == 0:
+            continue
+
+        # For each frame, check if this entire hand group is NaN
+        hand_data = out[:, rows, :]                   # (T, 21, 3)
+        all_nan = np.all(np.isnan(hand_data[:, :, 0]), axis=1)  # (T,)
+
+        t = 0
+        while t < T:
+            if not all_nan[t]:
+                t += 1
+                continue
+            # Found start of a NaN gap
+            gap_start = t
+            while t < T and all_nan[t]:
+                t += 1
+            gap_end = t  # exclusive
+            gap_len = gap_end - gap_start
+
+            # Only interpolate short gaps that have valid frames on both sides
+            if gap_len > max_gap:
+                continue
+            if gap_start == 0 or gap_end >= T:
+                continue
+            if all_nan[gap_start - 1] or all_nan[min(gap_end, T - 1)]:
+                continue
+
+            # Linear interpolation between the frame before and after the gap
+            before = out[gap_start - 1, rows, :]   # (21, 3)
+            after  = out[gap_end, rows, :]          # (21, 3)
+            for g in range(gap_len):
+                alpha = (g + 1) / (gap_len + 1)
+                out[gap_start + g, rows, :] = before * (1 - alpha) + after * alpha
+
+    return out
+
+
 # ── Frame processing — pure numpy, zero pandas in hot path ────────────────────
 def build_frame_array(landmarks_dict: dict) -> np.ndarray | None:
     """Convert one MediaPipe Holistic frame → (ROWS_PER_FRAME, 3) float32.
@@ -453,14 +508,22 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
                 if not lh and not rh:
                     continue
 
-                # Track motion — but ALWAYS store the frame.  The model's
-                # internal velocity/acceleration features need the full
-                # temporal sequence, including pauses.
-                curr_xy = np.array([[p["x"], p["y"]] for p in lh + rh], dtype=np.float32)
-                prev    = state["prev_hand_xy"]
-                if prev is not None and prev.shape == curr_xy.shape:
-                    if float(np.mean(np.abs(curr_xy - prev))) >= state["motion_thr"]:
-                        state["has_motion"] = True
+                # Track motion — fixed-size (42, 2) array so shape never
+                # changes when one hand drops out.  Missing hand → NaN.
+                curr_xy = np.full((42, 2), np.nan, dtype=np.float32)
+                for i, p in enumerate(lh[:21]):
+                    curr_xy[i] = [p["x"], p["y"]]
+                for i, p in enumerate(rh[:21]):
+                    curr_xy[21 + i] = [p["x"], p["y"]]
+
+                prev = state["prev_hand_xy"]
+                if prev is not None:
+                    # Compare only landmarks that are valid in BOTH frames
+                    both_valid = ~(np.isnan(curr_xy[:, 0]) | np.isnan(prev[:, 0]))
+                    if both_valid.any():
+                        delta = float(np.mean(np.abs(curr_xy[both_valid] - prev[both_valid])))
+                        if delta >= state["motion_thr"]:
+                            state["has_motion"] = True
                 state["prev_hand_xy"] = curr_xy
 
                 frame_arr = build_frame_array(lm)
@@ -491,6 +554,11 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
                 # ── Sliding window: use last INFER_WINDOW frames ──────────
                 window = list(frames)[-INFER_WINDOW:] if n_frames > INFER_WINDOW else list(frames)
                 seq = np.stack(window, axis=0)
+
+                # Interpolate short NaN gaps (1-3 frames) in hand data.
+                # When hands overlap, MediaPipe briefly loses one hand;
+                # interpolation preserves the velocity/accel features.
+                seq = interpolate_nan_gaps(seq, max_gap=3)
 
                 # Filter all-NaN frames (matching training pipeline)
                 valid_mask = ~np.all(np.isnan(seq), axis=(1, 2))
