@@ -296,7 +296,7 @@ async function startCamera(videoEl, canvasEl, placeholderEl, onResults) {
     modelComplexity: 1, smoothLandmarks: true,
     enableSegmentation: false, smoothSegmentation: false,
     refineFaceLandmarks: false,
-    minDetectionConfidence: 0.5, minTrackingConfidence: 0.5,
+    minDetectionConfidence: 0.4, minTrackingConfidence: 0.3,
   });
   h.onResults(onResults);
 
@@ -474,16 +474,19 @@ const arenaVideoSlot   = document.getElementById('arenaVideoSlot');
 const sessionComplete  = document.getElementById('sessionComplete');
 const completeResults  = document.getElementById('completeResults');
 
-function buildQueue(signs) {
-  // Shuffle, but front-load weak signs
-  const weak   = signs.filter(s => progress.weak.includes(s));
-  const normal = signs.filter(s => !progress.weak.includes(s));
+function buildQueue(signs, pinFirst = null) {
+  // Shuffle, but front-load weak signs.
+  // If pinFirst is set, exclude it from shuffle and prepend it.
+  const pin    = pinFirst ? signs.filter(s => s === pinFirst) : [];
+  const rest   = pinFirst ? signs.filter(s => s !== pinFirst) : signs;
+  const weak   = rest.filter(s => progress.weak.includes(s));
+  const normal = rest.filter(s => !progress.weak.includes(s));
   const shuffle = arr => arr.sort(() => Math.random() - .5);
-  return [...shuffle(weak), ...shuffle(normal)];
+  return [...pin, ...shuffle(weak), ...shuffle(normal)];
 }
 
-function startSession(signNames) {
-  session.queue      = buildQueue(signNames);
+function startSession(signNames, pinFirst = null) {
+  session.queue      = buildQueue(signNames, pinFirst);
   session.queueIndex = 0;
   session.results    = [];
   session.active     = true;
@@ -498,8 +501,8 @@ function startSession(signNames) {
 
 function startSinglePractice(sign) {
   switchTab('practice');
-  const queue = [sign, ...VOCAB.map(e => e.sign).filter(s => s !== sign && !progress.mastered.includes(s)).slice(0, 9)];
-  startSession(queue.slice(0, Math.min(queue.length, 10)));
+  const rest = VOCAB.map(e => e.sign).filter(s => s !== sign && !progress.mastered.includes(s)).slice(0, 9);
+  startSession([sign, ...rest], sign);
 }
 
 function loadPracticeSign(sign) {

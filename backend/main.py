@@ -23,17 +23,14 @@ app.add_middleware(
 # ── Gates ─────────────────────────────────────────────────────────────────────
 
 GATES: dict[str, float | int] = {
-    "confidence": 0.12,   # NaN+TTA gives well-calibrated probs; real signs ~12-50%
-    "margin":     0.02,   # TTA sharpens margin for real signs, flattens noise
-    "consecutive": 2,     # lower: TTA+EMA stabilise enough that 2 hits suffice
+    "confidence": 0.15,   # real signs with NaN+TTA typically 15-50%
+    "margin":     0.03,   # top sign must be 3% ahead of second-best
+    "consecutive": 3,     # 3 consecutive hits before committing a sign
     "motion":     0.002,  # very permissive; model needs full temporal sequence
 }
 
-MAX_FRAMES    = 256       # model trained with MAX_LEN=384; generous window
+MAX_FRAMES    = 384       # model trained with MAX_LEN=384; match training
 MIN_FRAMES    = 8         # need at least this many before inference makes sense
-INFER_WINDOW  = 64        # use last N frames for inference (typical sign ~1-2s)
-EMA_ALPHA     = 0.55      # prediction smoothing: 55% new + 45% previous
-VIS_THRESHOLD = 0.3       # landmarks below this visibility → NaN
 
 # ── Globals ───────────────────────────────────────────────────────────────────
 TF_MODEL        = None
@@ -170,6 +167,55 @@ def load_model() -> None:
 load_model()
 
 
+# ── NaN interpolation for short hand dropouts ────────────────────────────────
+def interpolate_nan_gaps(seq: np.ndarray, max_gap: int = 3) -> np.ndarray:
+    """Fill short NaN gaps in a (T, 543, 3) sequence via linear interpolation.
+
+    When hands overlap, MediaPipe briefly loses one hand for 1-3 frames.
+    These NaN gaps break the model's velocity/acceleration features.
+    Interpolating short gaps preserves motion continuity.
+    """
+    T = seq.shape[0]
+    if T < 3:
+        return seq
+
+    seq = seq.copy()
+    # Work on each landmark row × coord independently
+    for row in range(seq.shape[1]):
+        for coord in range(seq.shape[2]):
+            col = seq[:, row, coord]
+            isnan = np.isnan(col)
+            if not isnan.any() or isnan.all():
+                continue
+
+            # Find contiguous NaN runs
+            changes = np.diff(isnan.astype(np.int8))
+            starts = np.where(changes == 1)[0] + 1    # NaN run starts
+            ends   = np.where(changes == -1)[0] + 1   # NaN run ends
+
+            # Handle edge: starts with NaN
+            if isnan[0]:
+                starts = np.concatenate(([0], starts))
+            # Handle edge: ends with NaN
+            if isnan[-1]:
+                ends = np.concatenate((ends, [T]))
+
+            for s, e in zip(starts, ends):
+                gap = e - s
+                if gap > max_gap:
+                    continue
+                # Need valid values on both sides to interpolate
+                if s == 0 or e >= T:
+                    continue
+                left  = col[s - 1]
+                right = col[e]
+                if np.isnan(left) or np.isnan(right):
+                    continue
+                col[s:e] = np.linspace(left, right, gap + 2)[1:-1]
+
+    return seq
+
+
 # ── Frame processing — pure numpy, zero pandas in hot path ────────────────────
 def build_frame_array(landmarks_dict: dict) -> np.ndarray | None:
     """Convert one MediaPipe Holistic frame → (ROWS_PER_FRAME, 3) float32.
@@ -201,12 +247,9 @@ def build_frame_array(landmarks_dict: dict) -> np.ndarray | None:
             dtype=np.float32,
         )
 
-        # Mark low-visibility landmarks as NaN (pose & face have visibility;
-        # hand landmarks don't, so they default to 1.0 and pass the check).
-        vis = np.array(
-            [p.get("visibility", 1.0) for p in lm_list], dtype=np.float32,
-        )
-        arr[vis < VIS_THRESHOLD] = np.nan
+        # NOTE: No visibility filter.  The model was trained on raw MediaPipe
+        # output including low-visibility landmarks.  NaN-ifying them skews
+        # the model's internal z-score normalisation and hurts accuracy.
 
         valid = indices < len(arr)
         out[rows[valid]] = arr[indices[valid]]
@@ -433,7 +476,6 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
         "prev_hand_xy": None,
         "motion_thr":   float(GATES["motion"]),
         "has_motion":   False,
-        "ema_probs":    None,       # EMA-smoothed probability vector
     }
     connected[client_id] = state
 
@@ -453,14 +495,22 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
                 if not lh and not rh:
                     continue
 
-                # Track motion — but ALWAYS store the frame.  The model's
-                # internal velocity/acceleration features need the full
-                # temporal sequence, including pauses.
-                curr_xy = np.array([[p["x"], p["y"]] for p in lh + rh], dtype=np.float32)
-                prev    = state["prev_hand_xy"]
-                if prev is not None and prev.shape == curr_xy.shape:
-                    if float(np.mean(np.abs(curr_xy - prev))) >= state["motion_thr"]:
-                        state["has_motion"] = True
+                # Track motion — fixed-size (42, 2) array so shape never
+                # changes when one hand drops out.  Missing hand → NaN.
+                curr_xy = np.full((42, 2), np.nan, dtype=np.float32)
+                for i, p in enumerate(lh[:21]):
+                    curr_xy[i] = [p["x"], p["y"]]
+                for i, p in enumerate(rh[:21]):
+                    curr_xy[21 + i] = [p["x"], p["y"]]
+
+                prev = state["prev_hand_xy"]
+                if prev is not None:
+                    # Compare only landmarks that are valid in BOTH frames
+                    both_valid = ~(np.isnan(curr_xy[:, 0]) | np.isnan(prev[:, 0]))
+                    if both_valid.any():
+                        delta = float(np.mean(np.abs(curr_xy[both_valid] - prev[both_valid])))
+                        if delta >= state["motion_thr"]:
+                            state["has_motion"] = True
                 state["prev_hand_xy"] = curr_xy
 
                 frame_arr = build_frame_array(lm)
@@ -488,9 +538,14 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
                     })
                     continue
 
-                # ── Sliding window: use last INFER_WINDOW frames ──────────
-                window = list(frames)[-INFER_WINDOW:] if n_frames > INFER_WINDOW else list(frames)
-                seq = np.stack(window, axis=0)
+                # Use the full frame buffer (no windowing — the model was
+                # trained with MAX_LEN=384 and handles variable lengths).
+                seq = np.stack(list(frames), axis=0)
+
+                # Interpolate short NaN gaps (1-3 frames) in hand data.
+                # When hands overlap, MediaPipe briefly loses one hand;
+                # interpolation preserves the velocity/accel features.
+                seq = interpolate_nan_gaps(seq, max_gap=3)
 
                 # Filter all-NaN frames (matching training pipeline)
                 valid_mask = ~np.all(np.isnan(seq), axis=(1, 2))
@@ -514,12 +569,6 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
                     })
                     continue
 
-                # ── EMA smoothing across predict cycles ───────────────────
-                prev_ema = state["ema_probs"]
-                if prev_ema is not None and prev_ema.shape == probs.shape:
-                    probs = EMA_ALPHA * probs + (1.0 - EMA_ALPHA) * prev_ema
-                state["ema_probs"] = probs
-
                 top_id   = int(np.argmax(probs))
                 top_prob = float(probs[top_id])
 
@@ -540,12 +589,11 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
                         committed = sign
                         flushed   = state["buf"].add(committed)
 
-                        # Clear frame buffer + EMA after committing a sign
+                        # Clear frame buffer after committing a sign
                         # so the next prediction starts from fresh motion.
                         if state["buf"]._count == 0:
                             state["frames"].clear()
                             state["has_motion"] = False
-                            state["ema_probs"]  = None
 
                         if flushed:
                             await websocket.send_json({
@@ -573,7 +621,6 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
                 flushed             = state["buf"].force_flush()
                 state["frames"]     = deque(maxlen=MAX_FRAMES)
                 state["prev_hand_xy"] = None
-                state["ema_probs"]  = None
                 if flushed:
                     await websocket.send_json({
                         "type":     "sentence",

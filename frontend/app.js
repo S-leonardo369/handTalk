@@ -197,7 +197,7 @@ function connectWS() {
     setStatus('ok', 'Live');
     wsReconnectDelay = WS_RECONNECT_BASE;
     // Sync confidence slider + motion threshold to backend on reconnect
-    wsSend(JSON.stringify({ action: 'set_threshold', confidence: hudConfThresh, motion: 0.003 }));
+    wsSend(JSON.stringify({ action: 'set_threshold', confidence: hudConfThresh }));
   };
 
   ws.onmessage = (e) => {
@@ -276,8 +276,8 @@ async function initHolistic() {
     enableSegmentation:     false,
     smoothSegmentation:     false,
     refineFaceLandmarks:    false,  // saves GPU, not needed for sign recognition
-    minDetectionConfidence: 0.5,
-    minTrackingConfidence:  0.5,
+    minDetectionConfidence: 0.4,
+    minTrackingConfidence:  0.3,
   });
 
   holistic.onResults(onHolisticResults);
