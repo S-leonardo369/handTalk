@@ -401,8 +401,8 @@ async function startCamera() {
         try { await holistic.send({ image: video }); }
         finally { _holisticBusy = false; }
       },
-      width: 640, height: 480,  // always process at 640x480 — landmarks are normalized
-    });                           // so accuracy is unaffected; faster = no frame queue buildup
+      width: CAM_W, height: CAM_H,
+    });
     holisticCamera.start();
 
     startScreen?.classList.add('gone');

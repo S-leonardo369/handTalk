@@ -311,7 +311,7 @@ async function startCamera(videoEl, canvasEl, placeholderEl, onResults) {
       try { await h.send({ image: videoEl }); }
       finally { _holisticBusy = false; }
     },
-    width: 640, height: 480,
+    width: CAM_W, height: CAM_H,
   });
   cam.start();
 
