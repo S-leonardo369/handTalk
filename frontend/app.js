@@ -590,7 +590,7 @@ window.speechSynthesis?.getVoices();
 let demoRunning = false;
 let _vocabCache = null;  // cached sign names from /vocab
 
-const DEMO_SEQUENCE = ['cloud', 'any', 'bye', 'apple', 'eye', 'cry', 'book', 'ear'];
+const DEMO_SEQUENCE = ['hello', 'smile', 'now', 'bye'];
 
 document.getElementById('btnDemo')?.addEventListener('click', () => {
   settingsPanel?.classList.remove('open');
@@ -617,7 +617,7 @@ document.getElementById('btnDemo')?.addEventListener('click', () => {
       updateChips([]);
       demoRunning = false;
     }
-  }, 10000);
+  }, 7000);
 });
 
 
