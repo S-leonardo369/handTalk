@@ -299,13 +299,19 @@ async function startCamera(videoEl, canvasEl, placeholderEl, onResults) {
     modelComplexity: IS_MOBILE ? 0 : 1, smoothLandmarks: true,
     enableSegmentation: false, smoothSegmentation: false,
     refineFaceLandmarks: false,
-    minDetectionConfidence: 0.3, minTrackingConfidence: 0.2,
+    minDetectionConfidence: 0.2, minTrackingConfidence: 0.1,
   });
   h.onResults(onResults);
 
+  let _holisticBusy = false;
   const cam = new window.Camera(videoEl, {
-    onFrame: async () => { if (h) await h.send({ image: videoEl }); },
-    width: CAM_W, height: CAM_H,
+    onFrame: async () => {
+      if (!h || _holisticBusy) return;
+      _holisticBusy = true;
+      try { await h.send({ image: videoEl }); }
+      finally { _holisticBusy = false; }
+    },
+    width: 640, height: 480,
   });
   cam.start();
 
@@ -368,8 +374,12 @@ function packLandmarks(res) {
 }
 
 function drawOnCanvas(results, videoEl, canvasEl) {
-  canvasEl.width  = videoEl.videoWidth  || 640;
-  canvasEl.height = videoEl.videoHeight || 480;
+  const w = videoEl.videoWidth  || 640;
+  const h = videoEl.videoHeight || 480;
+  if (canvasEl.width !== w || canvasEl.height !== h) {
+    canvasEl.width  = w;   // only resize when dimensions actually change
+    canvasEl.height = h;   // avoids layout recalc every frame
+  }
   const ctx = canvasEl.getContext('2d');
   ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
   if (results.leftHandLandmarks) {
@@ -559,10 +569,12 @@ async function initPracticeCamera() {
   practiceCamStatus.textContent = 'Ready — sign when you are';
 }
 
+// Cache DOM refs — avoids getElementById on every frame (30fps)
+const _practiceVideoEl  = document.getElementById('practiceVideo');
+const _practiceCanvasEl = document.getElementById('practiceCanvas');
+
 function onPracticeResults(results) {
-  const videoEl  = document.getElementById('practiceVideo');
-  const canvasEl = document.getElementById('practiceCanvas');
-  drawOnCanvas(results, videoEl, canvasEl);
+  drawOnCanvas(results, _practiceVideoEl, _practiceCanvasEl);
   sendFrame(packLandmarks(results));
 }
 

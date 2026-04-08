@@ -281,8 +281,8 @@ async function initHolistic() {
     enableSegmentation:     false,
     smoothSegmentation:     false,
     refineFaceLandmarks:    false,
-    minDetectionConfidence: 0.3,
-    minTrackingConfidence:  0.2,
+    minDetectionConfidence: 0.2,
+    minTrackingConfidence:  0.1,
   });
 
   holistic.onResults(onHolisticResults);
@@ -393,10 +393,16 @@ async function startCamera() {
     video.srcObject = stream;
     await video.play();
 
+    let _holisticBusy = false;
     holisticCamera = new window.Camera(video, {
-      onFrame: async () => { if (holistic) await holistic.send({ image: video }); },
-      width: CAM_W, height: CAM_H,
-    });
+      onFrame: async () => {
+        if (!holistic || _holisticBusy) return; // drop frame if still processing previous
+        _holisticBusy = true;
+        try { await holistic.send({ image: video }); }
+        finally { _holisticBusy = false; }
+      },
+      width: 640, height: 480,  // always process at 640x480 — landmarks are normalized
+    });                           // so accuracy is unaffected; faster = no frame queue buildup
     holisticCamera.start();
 
     startScreen?.classList.add('gone');
