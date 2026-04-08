@@ -280,7 +280,7 @@ async function initHolistic() {
     smoothLandmarks:        true,
     enableSegmentation:     false,
     smoothSegmentation:     false,
-    refineFaceLandmarks:    false,
+    refineFaceLandmarks:    !IS_MOBILE,  // more precise face mesh on desktop
     minDetectionConfidence: 0.2,
     minTrackingConfidence:  0.1,
   });

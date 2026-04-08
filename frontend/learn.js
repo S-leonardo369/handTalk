@@ -298,7 +298,7 @@ async function startCamera(videoEl, canvasEl, placeholderEl, onResults) {
   h.setOptions({
     modelComplexity: IS_MOBILE ? 0 : 1, smoothLandmarks: true,
     enableSegmentation: false, smoothSegmentation: false,
-    refineFaceLandmarks: false,
+    refineFaceLandmarks: !IS_MOBILE,
     minDetectionConfidence: 0.2, minTrackingConfidence: 0.1,
   });
   h.onResults(onResults);
