@@ -13,8 +13,8 @@ const CLIENT_ID         = Math.random().toString(36).slice(2);
 const CONTROLS_TIMEOUT  = 3000;
 const IS_MOBILE         = window.innerWidth < 768 || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 const SEND_EVERY_N      = IS_MOBILE ? 20 : 15;  // mobile: fewer predictions to save CPU/bandwidth
-const CAM_W             = IS_MOBILE ? 640 : 1920;
-const CAM_H             = IS_MOBILE ? 480 : 1080;
+const CAM_W             = IS_MOBILE ? 640 : 1280;
+const CAM_H             = IS_MOBILE ? 480 : 720;
 const WS_RECONNECT_BASE = 1000;
 const WS_RECONNECT_MAX  = 16000;
 
@@ -276,11 +276,11 @@ async function initHolistic() {
   });
 
   holistic.setOptions({
-    modelComplexity:        IS_MOBILE ? 0 : 2,  // max quality on desktop, lite on mobile
+    modelComplexity:        IS_MOBILE ? 0 : 1,
     smoothLandmarks:        true,
     enableSegmentation:     false,
     smoothSegmentation:     false,
-    refineFaceLandmarks:    !IS_MOBILE,  // more precise face mesh on desktop
+    refineFaceLandmarks:    false,
     minDetectionConfidence: 0.3,
     minTrackingConfidence:  0.2,
   });

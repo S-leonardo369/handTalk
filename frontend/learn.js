@@ -14,8 +14,8 @@ const QUIZ_TIME      = 10;     // seconds per quiz sign
 const INSTANT_CONF   = 0.85;   // confidence threshold for instant pass
 const IS_MOBILE      = window.innerWidth < 768 || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
 const SEND_EVERY_N   = IS_MOBILE ? 20 : 15;
-const CAM_W          = IS_MOBILE ? 640 : 1920;
-const CAM_H          = IS_MOBILE ? 480 : 1080;
+const CAM_W          = IS_MOBILE ? 640 : 1280;
+const CAM_H          = IS_MOBILE ? 480 : 720;
 
 const HOLISTIC_UTILS  = 'https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js';
 const HOLISTIC_DRAW   = 'https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1675466124/drawing_utils.js';
@@ -296,9 +296,9 @@ async function startCamera(videoEl, canvasEl, placeholderEl, onResults) {
     locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5.1675471629/${f}`
   });
   h.setOptions({
-    modelComplexity: IS_MOBILE ? 0 : 2, smoothLandmarks: true,
+    modelComplexity: IS_MOBILE ? 0 : 1, smoothLandmarks: true,
     enableSegmentation: false, smoothSegmentation: false,
-    refineFaceLandmarks: !IS_MOBILE,
+    refineFaceLandmarks: false,
     minDetectionConfidence: 0.3, minTrackingConfidence: 0.2,
   });
   h.onResults(onResults);
