@@ -11,7 +11,10 @@ const DRAWING_UTILS   = "https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0
 // ── Constants ─────────────────────────────────────────────────────────────────
 const CLIENT_ID         = Math.random().toString(36).slice(2);
 const CONTROLS_TIMEOUT  = 3000;
-const SEND_EVERY_N      = 15;      // trigger predict every N frames (~0.5s at 30fps)
+const IS_MOBILE         = window.innerWidth < 768 || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+const SEND_EVERY_N      = IS_MOBILE ? 20 : 15;  // mobile: fewer predictions to save CPU/bandwidth
+const CAM_W             = IS_MOBILE ? 640 : 1280;
+const CAM_H             = IS_MOBILE ? 480 : 720;
 const WS_RECONNECT_BASE = 1000;
 const WS_RECONNECT_MAX  = 16000;
 
@@ -273,11 +276,11 @@ async function initHolistic() {
   });
 
   holistic.setOptions({
-    modelComplexity:        1,
+    modelComplexity:        IS_MOBILE ? 0 : 1,  // lite model on mobile (~30% faster)
     smoothLandmarks:        true,
     enableSegmentation:     false,
     smoothSegmentation:     false,
-    refineFaceLandmarks:    false,  // saves GPU, not needed for sign recognition
+    refineFaceLandmarks:    false,
     minDetectionConfidence: 0.3,
     minTrackingConfidence:  0.2,
   });
@@ -340,11 +343,11 @@ function onHolisticResults(results) {
 
     const config = getResponsiveDrawConfig();
     if (results.leftHandLandmarks) {
-      window.drawConnectors(ctx, results.leftHandLandmarks, window.HAND_CONNECTIONS, config.conn);
+      if (!IS_MOBILE) window.drawConnectors(ctx, results.leftHandLandmarks, window.HAND_CONNECTIONS, config.conn);
       window.drawLandmarks(ctx,  results.leftHandLandmarks, config.lm);
     }
     if (results.rightHandLandmarks) {
-      window.drawConnectors(ctx, results.rightHandLandmarks, window.HAND_CONNECTIONS, config.conn);
+      if (!IS_MOBILE) window.drawConnectors(ctx, results.rightHandLandmarks, window.HAND_CONNECTIONS, config.conn);
       window.drawLandmarks(ctx,  results.rightHandLandmarks, config.lm);
     }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -383,7 +386,7 @@ async function startCamera() {
     if (!holistic) await initHolistic();
 
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+      video: { facingMode: 'user', width: { ideal: CAM_W }, height: { ideal: CAM_H } },
       audio: false,
     });
 
@@ -392,7 +395,7 @@ async function startCamera() {
 
     holisticCamera = new window.Camera(video, {
       onFrame: async () => { if (holistic) await holistic.send({ image: video }); },
-      width: 1280, height: 720,
+      width: CAM_W, height: CAM_H,
     });
     holisticCamera.start();
 

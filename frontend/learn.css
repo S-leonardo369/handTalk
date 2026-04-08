@@ -640,3 +640,12 @@ html, body {
 .timer-bar-fill {
   transition: width .8s linear; /* smoother timer */
 }
+
+/* Mobile performance — disable GPU-heavy effects */
+@media (max-width: 768px) {
+  .mode-bar,
+  .sign-modal-inner {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}

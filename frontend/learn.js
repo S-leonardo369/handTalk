@@ -12,7 +12,10 @@ const LEARN_ID       = 'learn_' + Math.random().toString(36).slice(2);
 const REQUIRED_HITS  = 3;      // consecutive correct predictions to pass
 const QUIZ_TIME      = 10;     // seconds per quiz sign
 const INSTANT_CONF   = 0.85;   // confidence threshold for instant pass
-const SEND_EVERY_N   = 15;     // frames per predict cycle (matches Translate)
+const IS_MOBILE      = window.innerWidth < 768 || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+const SEND_EVERY_N   = IS_MOBILE ? 20 : 15;
+const CAM_W          = IS_MOBILE ? 640 : 1280;
+const CAM_H          = IS_MOBILE ? 480 : 720;
 
 const HOLISTIC_UTILS  = 'https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js';
 const HOLISTIC_DRAW   = 'https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1675466124/drawing_utils.js';
@@ -275,7 +278,7 @@ async function startCamera(videoEl, canvasEl, placeholderEl, onResults) {
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+      video: { facingMode: 'user', width: { ideal: CAM_W }, height: { ideal: CAM_H } },
       audio: false,
     });
   } catch (e) {
@@ -293,7 +296,7 @@ async function startCamera(videoEl, canvasEl, placeholderEl, onResults) {
     locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5.1675471629/${f}`
   });
   h.setOptions({
-    modelComplexity: 1, smoothLandmarks: true,
+    modelComplexity: IS_MOBILE ? 0 : 1, smoothLandmarks: true,
     enableSegmentation: false, smoothSegmentation: false,
     refineFaceLandmarks: false,
     minDetectionConfidence: 0.3, minTrackingConfidence: 0.2,
@@ -302,7 +305,7 @@ async function startCamera(videoEl, canvasEl, placeholderEl, onResults) {
 
   const cam = new window.Camera(videoEl, {
     onFrame: async () => { if (h) await h.send({ image: videoEl }); },
-    width: 1280, height: 720,
+    width: CAM_W, height: CAM_H,
   });
   cam.start();
 
@@ -370,11 +373,11 @@ function drawOnCanvas(results, videoEl, canvasEl) {
   const ctx = canvasEl.getContext('2d');
   ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
   if (results.leftHandLandmarks) {
-    window.drawConnectors(ctx, results.leftHandLandmarks, window.HAND_CONNECTIONS, DRAW_CONN);
+    if (!IS_MOBILE) window.drawConnectors(ctx, results.leftHandLandmarks, window.HAND_CONNECTIONS, DRAW_CONN);
     window.drawLandmarks(ctx,  results.leftHandLandmarks, DRAW_LM);
   }
   if (results.rightHandLandmarks) {
-    window.drawConnectors(ctx, results.rightHandLandmarks, window.HAND_CONNECTIONS, DRAW_CONN);
+    if (!IS_MOBILE) window.drawConnectors(ctx, results.rightHandLandmarks, window.HAND_CONNECTIONS, DRAW_CONN);
     window.drawLandmarks(ctx,  results.rightHandLandmarks, DRAW_LM);
   }
 }
