@@ -296,7 +296,7 @@ async function startCamera(videoEl, canvasEl, placeholderEl, onResults) {
     modelComplexity: 1, smoothLandmarks: true,
     enableSegmentation: false, smoothSegmentation: false,
     refineFaceLandmarks: false,
-    minDetectionConfidence: 0.4, minTrackingConfidence: 0.3,
+    minDetectionConfidence: 0.3, minTrackingConfidence: 0.2,
   });
   h.onResults(onResults);
 

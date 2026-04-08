@@ -492,27 +492,28 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str) -> None:
                 lm = data.get("landmarks", {})
                 lh = lm.get("leftHandLandmarks")  or []
                 rh = lm.get("rightHandLandmarks") or []
-                if not lh and not rh:
-                    continue
 
-                # Track motion — fixed-size (42, 2) array so shape never
-                # changes when one hand drops out.  Missing hand → NaN.
-                curr_xy = np.full((42, 2), np.nan, dtype=np.float32)
-                for i, p in enumerate(lh[:21]):
-                    curr_xy[i] = [p["x"], p["y"]]
-                for i, p in enumerate(rh[:21]):
-                    curr_xy[21 + i] = [p["x"], p["y"]]
+                # Motion tracking — only when hands are visible
+                if lh or rh:
+                    curr_xy = np.full((42, 2), np.nan, dtype=np.float32)
+                    for i, p in enumerate(lh[:21]):
+                        curr_xy[i] = [p["x"], p["y"]]
+                    for i, p in enumerate(rh[:21]):
+                        curr_xy[21 + i] = [p["x"], p["y"]]
 
-                prev = state["prev_hand_xy"]
-                if prev is not None:
-                    # Compare only landmarks that are valid in BOTH frames
-                    both_valid = ~(np.isnan(curr_xy[:, 0]) | np.isnan(prev[:, 0]))
-                    if both_valid.any():
-                        delta = float(np.mean(np.abs(curr_xy[both_valid] - prev[both_valid])))
-                        if delta >= state["motion_thr"]:
-                            state["has_motion"] = True
-                state["prev_hand_xy"] = curr_xy
+                    prev = state["prev_hand_xy"]
+                    if prev is not None:
+                        both_valid = ~(np.isnan(curr_xy[:, 0]) | np.isnan(prev[:, 0]))
+                        if both_valid.any():
+                            delta = float(np.mean(np.abs(curr_xy[both_valid] - prev[both_valid])))
+                            if delta >= state["motion_thr"]:
+                                state["has_motion"] = True
+                    state["prev_hand_xy"] = curr_xy
 
+                # ALWAYS store the frame — even when hands are briefly lost.
+                # Face data (76 landmarks) is still valuable for the model's
+                # normalisation, and NaN for missing hands gets handled by
+                # interpolation + the model's internal NaN→0 replacement.
                 frame_arr = build_frame_array(lm)
                 if frame_arr is not None:
                     state["frames"].append(frame_arr)

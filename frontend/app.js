@@ -107,6 +107,8 @@ let lastVideoW       = 0;
 let lastVideoH       = 0;
 let wsReconnectDelay = WS_RECONNECT_BASE;
 let hudConfThresh    = 0.5; // cached from slider — avoids DOM read per WS message
+let gracePeriod      = 0;   // frames remaining in grace period after hands disappear
+const GRACE_FRAMES   = 30;  // ~1 second at 30fps — keep sending face data after hands vanish
 
 // ── Script loader ─────────────────────────────────────────────────────────────
 function loadScript(src) {
@@ -276,8 +278,8 @@ async function initHolistic() {
     enableSegmentation:     false,
     smoothSegmentation:     false,
     refineFaceLandmarks:    false,  // saves GPU, not needed for sign recognition
-    minDetectionConfidence: 0.4,
-    minTrackingConfidence:  0.3,
+    minDetectionConfidence: 0.3,
+    minTrackingConfidence:  0.2,
   });
 
   holistic.onResults(onHolisticResults);
@@ -350,8 +352,16 @@ function onHolisticResults(results) {
 
   if (ws?.readyState !== WebSocket.OPEN) return;
 
-  if (hasHand && !demoRunning) {
-    // Only send frames when hands are visible and demo is not running
+  // Grace period: keep sending face/pose frames for ~1s after hands vanish.
+  // This gives the model continuous temporal data and lets NaN interpolation
+  // fill short hand dropouts instead of creating sequence gaps.
+  if (hasHand) {
+    gracePeriod = GRACE_FRAMES;
+  } else if (gracePeriod > 0) {
+    gracePeriod--;
+  }
+
+  if ((hasHand || gracePeriod > 0) && !demoRunning) {
     frameCount++;
     ws.send(JSON.stringify({ action: 'frame', landmarks: packLandmarks(results) }));
     if (frameCount >= SEND_EVERY_N) {
