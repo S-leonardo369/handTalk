@@ -176,6 +176,19 @@ const modalVideoSlot= document.getElementById('modalVideoSlot');
 const modalNoVideo  = document.getElementById('modalNoVideo');
 let   modalCurrentSign = null;
 
+function reloadSignASLWidget() {
+    // Remove existing SignASL script to avoid duplicates
+    const oldScript = document.querySelector('script[src="https://embed.signasl.org/widgets.js"]');
+    if (oldScript) oldScript.remove();
+
+    // Re-inject the widget script
+    const newScript = document.createElement('script');
+    newScript.src = 'https://embed.signasl.org/widgets.js';
+    newScript.async = true;
+    newScript.charset = 'utf-8';
+    document.head.appendChild(newScript);
+}
+
 function openSignModal(sign, aslId) {
     modalCurrentSign = sign;
     modalSignName.textContent = sign.toUpperCase();
@@ -188,6 +201,7 @@ function openSignModal(sign, aslId) {
 
     if (ytId) {
         videoContainer.innerHTML = `
+          <div style="position:relative; width:100%; padding-top:56.25%; background:#000;">
             <iframe
               src="https://www.youtube.com/embed/${ytId}?rel=0&modestbranding=1&playsinline=1"
               style="position:absolute; top:0; left:0; width:100%; height:100%; border:none;"
@@ -195,9 +209,10 @@ function openSignModal(sign, aslId) {
               frameborder="0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowfullscreen>
-            </iframe>`;
+            </iframe>
+          </div>`;
         videoContainer.style.display = 'block';
-        if (noVideoDiv) noVideoDiv.style.display = 'none';
+        if (noVideoDiv) noVideoDiv.classList.add('hidden');
     } else {
         videoContainer.innerHTML = '';
         videoContainer.style.display = 'none';
