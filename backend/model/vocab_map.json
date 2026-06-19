@@ -1,252 +1,1153 @@
 {
-  "0": {"sign": "TV", "yt_embedId": "XH8-L7NjeNY"},
-  "1": {"sign": "after", "yt_embedId": "nEGhuagav-w"},
-  "2": {"sign": "airplane", "yt_embedId": "eD5BTz7lR-o"},
-  "3": {"sign": "all", "yt_embedId": "0DgYClc0e-E"},
-  "4": {"sign": "alligator", "yt_embedId": "fe8_PKtzrvU"},
-  "5": {"sign": "animal", "yt_embedId": "IyMuDawJZu0"},
-  "6": {"sign": "another", "yt_embedId": "4fA8zFoEx3E"},
-  "7": {"sign": "any", "yt_embedId": "R5ZVh3chdZ4"},
-  "8": {"sign": "apple", "yt_embedId": "4gTs30ozIrA"},
-  "9": {"sign": "arm", "yt_embedId": ""},
-  "10": {"sign": "aunt", "yt_embedId": ""},
-  "11": {"sign": "awake", "yt_embedId": "SW7YgL6nwQA"},
-  "12": {"sign": "backyard", "yt_embedId": "haJ1RLVh7H8"},
-  "13": {"sign": "bad", "yt_embedId": "prwtXZ1o2As"},
-  "14": {"sign": "balloon", "yt_embedId": "ymtzU09GfmU"},
-  "15": {"sign": "bath", "yt_embedId": "r8wxFtDjU5Y"},
-  "16": {"sign": "because", "yt_embedId": "y-VBTZIkHTI"},
-  "17": {"sign": "bed", "yt_embedId": "RnbIsdsBc5Y"},
-  "18": {"sign": "bedroom", "yt_embedId": "83WlTF0pTAE"},
-  "19": {"sign": "bee", "yt_embedId": "S713PTJEjV0"},
-  "20": {"sign": "before", "yt_embedId": "1dhDpb69eSM"},
-  "21": {"sign": "beside", "yt_embedId": "alxQJ68dRRw"},
-  "22": {"sign": "better", "yt_embedId": "ikmUKffwp-I"},
-  "23": {"sign": "bird", "yt_embedId": "Bibgy-yjgYE"},
-  "24": {"sign": "black", "yt_embedId": "O5_4x8p5t4U"},
-  "25": {"sign": "blow", "yt_embedId": ""},
-  "26": {"sign": "blue", "yt_embedId": "2O8jkekJkiE"},
-  "27": {"sign": "boat", "yt_embedId": "aDt-KNA-v04"},
-  "28": {"sign": "book", "yt_embedId": "XjWSfh50kAU"},
-  "29": {"sign": "boy", "yt_embedId": "E-wBrs3PJhU"},
-  "30": {"sign": "brother", "yt_embedId": "G0fzmn3pQng"},
-  "31": {"sign": "brown", "yt_embedId": "PrniQgULERg"},
-  "32": {"sign": "bug", "yt_embedId": "Xg866nAu38A"},
-  "33": {"sign": "bye", "yt_embedId": "4e14uNAn2Ao"},
-  "34": {"sign": "callonphone", "yt_embedId": "xQCWPv-PrVM"},
-  "35": {"sign": "can", "yt_embedId": "_0-tGmDsFVc"},
-  "36": {"sign": "car", "yt_embedId": "-NTyYtAyUPI"},
-  "37": {"sign": "carrot", "yt_embedId": "wMX84DjGfwM"},
-  "38": {"sign": "cat", "yt_embedId": "a3b8LAX68Ho"},
-  "39": {"sign": "cereal", "yt_embedId": "lJnD0x8w-Ww"},
-  "40": {"sign": "chair", "yt_embedId": "9THlDKVfQJM"},
-  "41": {"sign": "cheek", "yt_embedId": ""},
-  "42": {"sign": "child", "yt_embedId": "32hgy9NSs7k"},
-  "43": {"sign": "chin", "yt_embedId": ""},
-  "44": {"sign": "chocolate", "yt_embedId": "RCC4R2zpXuI"},
-  "45": {"sign": "clean", "yt_embedId": "2PeTh4Ym048"},
-  "46": {"sign": "close", "yt_embedId": "UMH1_aRRjy0"},
-  "47": {"sign": "closet", "yt_embedId": "psUQ9xmXBbM"},
-  "48": {"sign": "cloud", "yt_embedId": "FT17b-fyP4o"},
-  "49": {"sign": "clown", "yt_embedId": "dGlt9EK8tzQ"},
-  "50": {"sign": "cow", "yt_embedId": "I2_nB2cXP58"},
-  "51": {"sign": "cowboy", "yt_embedId": ""},
-  "52": {"sign": "cry", "yt_embedId": "H6CQg4zRmlA"},
-  "53": {"sign": "cut", "yt_embedId": "C_n0oiY9iQQ"},
-  "54": {"sign": "cute", "yt_embedId": "Swd3dXctl9E"},
-  "55": {"sign": "dad", "yt_embedId": "1Vllc4F5ic0"},
-  "56": {"sign": "dance", "yt_embedId": "p3UKhedGeTA"},
-  "57": {"sign": "dirty", "yt_embedId": "K3BygEHQ-Ps"},
-  "58": {"sign": "dog", "yt_embedId": "IbpJtH_QssM"},
-  "59": {"sign": "doll", "yt_embedId": "pmtb5ajCJQ"},
-  "60": {"sign": "donkey", "yt_embedId": "NYjk6-dXb40"},
-  "61": {"sign": "down", "yt_embedId": "LXX6C7erUls"},
-  "62": {"sign": "drawer", "yt_embedId": "5wrl6AtW4oc"},
-  "63": {"sign": "drink", "yt_embedId": "LqJM7wcUixQ"},
-  "64": {"sign": "drop", "yt_embedId": "Ui097a43wo8"},
-  "65": {"sign": "dry", "yt_embedId": "NuXm0_3x6n8"},
-  "66": {"sign": "dryer", "yt_embedId": "J7FCsSQbWt0"},
-  "67": {"sign": "duck", "yt_embedId": "tyr9kyLfZyE"},
-  "68": {"sign": "ear", "yt_embedId": "Eqq_OZk1Eh4"},
-  "69": {"sign": "elephant", "yt_embedId": "0EYc8pG0F8s"},
-  "70": {"sign": "empty", "yt_embedId": ""},
-  "71": {"sign": "every", "yt_embedId": "t6eJ-SjoeAs"},
-  "72": {"sign": "eye", "yt_embedId": "wxbfGv77xxc"},
-  "73": {"sign": "face", "yt_embedId": "vToOzx3lsVQ"},
-  "74": {"sign": "fall", "yt_embedId": ""},
-  "75": {"sign": "farm", "yt_embedId": "smPpqc0kwFE"},
-  "76": {"sign": "fast", "yt_embedId": "pBzgV-u6WS8s"},
-  "77": {"sign": "feet", "yt_embedId": ""},
-  "78": {"sign": "find", "yt_embedId": "2O5wVw-rlIs"},
-  "79": {"sign": "fine", "yt_embedId": "YSTnrscx1UY"},
-  "80": {"sign": "finger", "yt_embedId": ""},
-  "81": {"sign": "finish", "yt_embedId": "oc4dw7ruW0E"},
-  "82": {"sign": "fireman", "yt_embedId": "Mxmxdu1SpZM"},
-  "83": {"sign": "first", "yt_embedId": "tZ04_s30aXY"},
-  "84": {"sign": "fish", "yt_embedId": "IJyUcYJMpmU"},
-  "85": {"sign": "flag", "yt_embedId": "3weRyM3RjHY"},
-  "86": {"sign": "flower", "yt_embedId": "33DHyOmJN1Y"},
-  "87": {"sign": "food", "yt_embedId": "2Dl1Q4vlQKs"},
-  "88": {"sign": "for", "yt_embedId": "xAhjtGNnQVk"},
-  "89": {"sign": "frenchfries", "yt_embedId": "ggo7f9YBkwY"},
-  "90": {"sign": "frog", "yt_embedId": "WKUEbjcYZdg"},
-  "91": {"sign": "garbage", "yt_embedId": "sHFqJ68Ev8o"},
-  "92": {"sign": "gift", "yt_embedId": ""},
-  "93": {"sign": "giraffe", "yt_embedId": "EfB-Nk1GjDQ"},
-  "94": {"sign": "girl", "yt_embedId": "pwh3cOdoiG4"},
-  "95": {"sign": "give", "yt_embedId": "U5p42-d-buw"},
-  "96": {"sign": "glasswindow", "yt_embedId": "nd7QatseVtg"},
-  "97": {"sign": "go", "yt_embedId": "neq1jYWQ-qg"},
-  "98": {"sign": "goose", "yt_embedId": "lfp6r5kep5Y"},
-  "99": {"sign": "grandma", "yt_embedId": "r8yvyGMnrYk"},
-  "100": {"sign": "grandpa", "yt_embedId": "D8OW3lFL_54"},
-  "101": {"sign": "grass", "yt_embedId": "o-GOlFqc_aw"},
-  "102": {"sign": "green", "yt_embedId": "WrkXE5l6udM"},
-  "103": {"sign": "gum", "yt_embedId": "Sr0GhJ-W4h8"},
-  "104": {"sign": "hair", "yt_embedId": "qa-1mVRY_HE"},
-  "105": {"sign": "happy", "yt_embedId": "ZXHHO_DY6_A"},
-  "106": {"sign": "hat", "yt_embedId": "bul0cjvDEEE"},
-  "107": {"sign": "hate", "yt_embedId": "S5Xkm-qaEQI"},
-  "108": {"sign": "have", "yt_embedId": "MeNcohEBMHU"},
-  "109": {"sign": "haveto", "yt_embedId": ""},
-  "110": {"sign": "head", "yt_embedId": "oUS2cVwUU3E"},
-  "111": {"sign": "hear", "yt_embedId": "U0ECXQ5XKYI"},
-  "112": {"sign": "helicopter", "yt_embedId": "hdiSoTueeN0"},
-  "113": {"sign": "hello", "yt_embedId": "FVjpLa8GqeM"},
-  "114": {"sign": "hen", "yt_embedId": "64ZHATvgx8s"},
-  "115": {"sign": "hesheit", "yt_embedId": "4qb_PAXa60w"},
-  "116": {"sign": "hide", "yt_embedId": "yZ8Uwt2-21o"},
-  "117": {"sign": "high", "yt_embedId": "GwOuxP6lSuE"},
-  "118": {"sign": "home", "yt_embedId": "WSHD1XX7kWk"},
-  "119": {"sign": "horse", "yt_embedId": "xCJGQseQ3Fw"},
-  "120": {"sign": "hot", "yt_embedId": "a0robonALIk"},
-  "121": {"sign": "hungry", "yt_embedId": "8ZOUoDZkAoQ"},
-  "122": {"sign": "icecream", "yt_embedId": "yIOuC_3ORrc"},
-  "123": {"sign": "if", "yt_embedId": "M8CXHkOskvo"},
-  "124": {"sign": "into", "yt_embedId": ""},
-  "125": {"sign": "jacket", "yt_embedId": "RhHvcp1K0-g"},
-  "126": {"sign": "jeans", "yt_embedId": "MnG-39ns_8c"},
-  "127": {"sign": "jump", "yt_embedId": "yCL4l8WBMVo"},
-  "128": {"sign": "kiss", "yt_embedId": "E94WQiNP2Go"},
-  "129": {"sign": "kitty", "yt_embedId": ""},
-  "130": {"sign": "lamp", "yt_embedId": "KOKG7jy8Loo"},
-  "131": {"sign": "later", "yt_embedId": "4Md8yfrXzp8"},
-  "132": {"sign": "like", "yt_embedId": "8uIg8r1awC4"},
-  "133": {"sign": "lion", "yt_embedId": ""},
-  "134": {"sign": "lips", "yt_embedId": ""},
-  "135": {"sign": "listen", "yt_embedId": "7I76cfbglQE"},
-  "136": {"sign": "look", "yt_embedId": "JytzcBQp8d4"},
-  "137": {"sign": "loud", "yt_embedId": "TxjCTeguvNg"},
-  "138": {"sign": "mad", "yt_embedId": "-Yqw89wx7TE"},
-  "139": {"sign": "make", "yt_embedId": ""},
-  "140": {"sign": "man", "yt_embedId": "rTUmMfWQ2rw"},
-  "141": {"sign": "many", "yt_embedId": "7O2mS0Kz4CA"},
-  "142": {"sign": "milk", "yt_embedId": "5yelilk0pD4"},
-  "143": {"sign": "minemy", "yt_embedId": "AESubfsrzP0"},
-  "144": {"sign": "mitten", "yt_embedId": "yZ6p_bpEt1Y"},
-  "145": {"sign": "mom", "yt_embedId": "DHl2-NT3mIM"},
-  "146": {"sign": "moon", "yt_embedId": "vtl8Wc8XCbk"},
-  "147": {"sign": "morning", "yt_embedId": "iH8N44QMh7c"},
-  "148": {"sign": "mouse", "yt_embedId": "aRqX-cSTGAs"},
-  "149": {"sign": "mouth", "yt_embedId": "OtK8Jv4U1CE"},
-  "150": {"sign": "nap", "yt_embedId": ""},
-  "151": {"sign": "napkin", "yt_embedId": "syo02EBG62A"},
-  "152": {"sign": "night", "yt_embedId": "jNiRlzvjd5U"},
-  "153": {"sign": "no", "yt_embedId": "QJXKaOSyl4o"},
-  "154": {"sign": "noisy", "yt_embedId": "yAtOFiUQ13M"},
-  "155": {"sign": "nose", "yt_embedId": "2FpYi18-FiU"},
-  "156": {"sign": "not", "yt_embedId": "pUn7pNE5HEE"},
-  "157": {"sign": "now", "yt_embedId": "OdOx4qaYlKI"},
-  "158": {"sign": "nuts", "yt_embedId": "vibnl8hF3dc"},
-  "159": {"sign": "old", "yt_embedId": "wmJfQSUsnQ8"},
-  "160": {"sign": "on", "yt_embedId": "e8hiRj3xDiw"},
-  "161": {"sign": "open", "yt_embedId": "LEWPXaskrJk"},
-  "162": {"sign": "orange", "yt_embedId": "3VAeP_x9tFg"},
-  "163": {"sign": "outside", "yt_embedId": "Usx2lHs8rM8"},
-  "164": {"sign": "owie", "yt_embedId": ""},
-  "165": {"sign": "owl", "yt_embedId": "uNMrZeLfl6M"},
-  "166": {"sign": "pajamas", "yt_embedId": ""},
-  "167": {"sign": "pen", "yt_embedId": "0t0nPPnXHjc"},
-  "168": {"sign": "pencil", "yt_embedId": "LjktDSbRaVM"},
-  "169": {"sign": "penny", "yt_embedId": "erCXJxrNtT4"},
-  "170": {"sign": "person", "yt_embedId": "RXX7T4-saPs"},
-  "171": {"sign": "pig", "yt_embedId": ""},
-  "172": {"sign": "pizza", "yt_embedId": "XIZ2DrdEU3k"},
-  "173": {"sign": "please", "yt_embedId": "rnb9FxPO7is"},
-  "174": {"sign": "police", "yt_embedId": "aPcjl3P94xc"},
-  "175": {"sign": "pool", "yt_embedId": "ioPNJSwE2_U"},
-  "176": {"sign": "potty", "yt_embedId": ""},
-  "177": {"sign": "pretend", "yt_embedId": "lheTIKA6WXs"},
-  "178": {"sign": "pretty", "yt_embedId": "FFk0f2q0X0"},
-  "179": {"sign": "puppy", "yt_embedId": ""},
-  "180": {"sign": "puzzle", "yt_embedId": ""},
-  "181": {"sign": "quiet", "yt_embedId": "xq2ZodH6gzk"},
-  "182": {"sign": "radio", "yt_embedId": "TU-VgMd_Yco"},
-  "183": {"sign": "rain", "yt_embedId": "Bk4w3wvvehE"},
-  "184": {"sign": "read", "yt_embedId": "Ae98aQIiVZo"},
-  "185": {"sign": "red", "yt_embedId": "pyW0OYYrZ7U"},
-  "186": {"sign": "refrigerator", "yt_embedId": "LOW8ZIaAJ-c"},
-  "187": {"sign": "ride", "yt_embedId": "kg8MJwFhiiw"},
-  "188": {"sign": "room", "yt_embedId": "ByET2PW3OrQ"},
-  "189": {"sign": "sad", "yt_embedId": "zfkQYQhrZ6Q"},
-  "190": {"sign": "same", "yt_embedId": "cnX45VWbjmc"},
-  "191": {"sign": "say", "yt_embedId": "fka6bGd2TX8"},
-  "192": {"sign": "scissors", "yt_embedId": "NntEm9lv8jw"},
-  "193": {"sign": "see", "yt_embedId": "7XQiv-PxecU"},
-  "194": {"sign": "shhh", "yt_embedId": "rmG9ri2h6Co"},
-  "195": {"sign": "shirt", "yt_embedId": "9Rcg3QJiClc"},
-  "196": {"sign": "shoe", "yt_embedId": "M1B5TMhbA24"},
-  "197": {"sign": "shower", "yt_embedId": "P7on9Ymhnu4"},
-  "198": {"sign": "sick", "yt_embedId": "IpwtXzIS1Z0"},
-  "199": {"sign": "sleep", "yt_embedId": "dXEqaWSEztY"},
-  "200": {"sign": "sleepy", "yt_embedId": "2LCp_ZNTwDA"},
-  "201": {"sign": "smile", "yt_embedId": ""},
-  "202": {"sign": "snack", "yt_embedId": "nX3l9Z_rOdg"},
-  "203": {"sign": "snow", "yt_embedId": "_v3yE7y6Gpo"},
-  "204": {"sign": "stairs", "yt_embedId": "7pas_QWHTJg"},
-  "205": {"sign": "stay", "yt_embedId": "QmbOr-8K_Kw"},
-  "206": {"sign": "sticky", "yt_embedId": "ccpGjd38TAA"},
-  "207": {"sign": "store", "yt_embedId": "CPp1UOM-olA"},
-  "208": {"sign": "story", "yt_embedId": "TqmlL13jZoI"},
-  "209": {"sign": "stuck", "yt_embedId": "XqpsPBnD-Qg"},
-  "210": {"sign": "sun", "yt_embedId": "AjJTLUhIHww"},
-  "211": {"sign": "table", "yt_embedId": "mEgQI-DHntY"},
-  "212": {"sign": "talk", "yt_embedId": "vB3APsM4FFQ"},
-  "213": {"sign": "taste", "yt_embedId": "4dQHo4Q2wGA"},
-  "214": {"sign": "thankyou", "yt_embedId": "2W0BDFUjsG0"},
-  "215": {"sign": "that", "yt_embedId": "tNas8PN6pIQ"},
-  "216": {"sign": "there", "yt_embedId": "m_gGp8-542c"},
-  "217": {"sign": "think", "yt_embedId": "NdTKb3Kig88"},
-  "218": {"sign": "thirsty", "yt_embedId": ""},
-  "219": {"sign": "tiger", "yt_embedId": ""},
-  "220": {"sign": "time", "yt_embedId": "ANRCVPkuN8Y"},
-  "221": {"sign": "tomorrow", "yt_embedId": "6gFOZMDptIk"},
-  "222": {"sign": "tongue", "yt_embedId": ""},
-  "223": {"sign": "tooth", "yt_embedId": ""},
-  "224": {"sign": "toothbrush", "yt_embedId": ""},
-  "225": {"sign": "touch", "yt_embedId": "ZF9qBf02iE0"},
-  "226": {"sign": "toy", "yt_embedId": ""},
-  "227": {"sign": "tree", "yt_embedId": "DMdPpkiUJso"},
-  "228": {"sign": "uncle", "yt_embedId": "PqtMCA2lu9w"},
-  "229": {"sign": "underwear", "yt_embedId": "yKAFC9iyxas"},
-  "230": {"sign": "up", "yt_embedId": ""},
-  "231": {"sign": "vacuum", "yt_embedId": "YvYI4AftJPo"},
-  "232": {"sign": "wait", "yt_embedId": "YfwgS9ZsBVw"},
-  "233": {"sign": "wake", "yt_embedId": "0n0eQSCS3Ow"},
-  "234": {"sign": "water", "yt_embedId": "e7_zscB_EVw"},
-  "235": {"sign": "wet", "yt_embedId": "5Ns7zdDWcbg"},
-  "236": {"sign": "weus", "yt_embedId": "2qRV959WnY0"},
-  "237": {"sign": "where", "yt_embedId": "HS0SXS-GHYY"},
-  "238": {"sign": "white", "yt_embedId": "uLjkLwFvFtw"},
-  "239": {"sign": "who", "yt_embedId": "wKl26BsEAoc"},
-  "240": {"sign": "why", "yt_embedId": "K0yp2v6Atxs"},
-  "241": {"sign": "will", "yt_embedId": "6YSr9tEaaTU"},
-  "242": {"sign": "wolf", "yt_embedId": "7xb2OOZUo3s"},
-  "243": {"sign": "yellow", "yt_embedId": "GY90AmJYl0E"},
-  "244": {"sign": "yes", "yt_embedId": "0usayvOXzHo"},
-  "245": {"sign": "yesterday", "yt_embedId": "BrSb83b9kbY"},
-  "246": {"sign": "yourself", "yt_embedId": "NF_jrhLKWlY"},
-  "247": {"sign": "yucky", "yt_embedId": "-RRi4uqRFaY"},
-  "248": {"sign": "zebra", "yt_embedId": ""},
-  "249": {"sign": "zipper", "yt_embedId": "m9fxgSPo0s0"}
+  "0": {
+    "sign": "TV",
+    "yt_embedId": "XH8-L7NjeNY"
+  },
+  "1": {
+    "sign": "after",
+    "yt_embedId": "nEGhuagav-w",
+    "asl_vidref": "ja570zwkak"
+  },
+  "2": {
+    "sign": "airplane",
+    "yt_embedId": "eD5BTz7lR-o",
+    "asl_vidref": "xnvmgdua42"
+  },
+  "3": {
+    "sign": "all",
+    "yt_embedId": "0DgYClc0e-E",
+    "asl_vidref": "nvhfgdvkky"
+  },
+  "4": {
+    "sign": "alligator",
+    "yt_embedId": "fe8_PKtzrvU",
+    "asl_vidref": "nkkgaaveds"
+  },
+  "5": {
+    "sign": "animal",
+    "yt_embedId": "IyMuDawJZu0",
+    "asl_vidref": "oyz76t3pvu"
+  },
+  "6": {
+    "sign": "another",
+    "yt_embedId": "4fA8zFoEx3E",
+    "asl_vidref": "uhuzazffzd"
+  },
+  "7": {
+    "sign": "any",
+    "yt_embedId": "R5ZVh3chdZ4",
+    "asl_vidref": "sm2qzzd8ru"
+  },
+  "8": {
+    "sign": "apple",
+    "yt_embedId": "4gTs30ozIrA",
+    "asl_vidref": "m4afnudyeu"
+  },
+  "9": {
+    "sign": "arm",
+    "yt_embedId": "",
+    "asl_vidref": "itqjchegzn"
+  },
+  "10": {
+    "sign": "aunt",
+    "yt_embedId": "",
+    "asl_vidref": "qxnypby59z"
+  },
+  "11": {
+    "sign": "awake",
+    "yt_embedId": "SW7YgL6nwQA",
+    "asl_vidref": "k4cpyjpn6h"
+  },
+  "12": {
+    "sign": "backyard",
+    "yt_embedId": "haJ1RLVh7H8",
+    "asl_vidref": "yqpm5vozt5"
+  },
+  "13": {
+    "sign": "bad",
+    "yt_embedId": "prwtXZ1o2As",
+    "asl_vidref": "4ry8nepxpk"
+  },
+  "14": {
+    "sign": "balloon",
+    "yt_embedId": "ymtzU09GfmU",
+    "asl_vidref": "ewgnm82vyd"
+  },
+  "15": {
+    "sign": "bath",
+    "yt_embedId": "r8wxFtDjU5Y",
+    "asl_vidref": "bx7vc0uogy"
+  },
+  "16": {
+    "sign": "because",
+    "yt_embedId": "y-VBTZIkHTI",
+    "asl_vidref": "itdgagaxz5"
+  },
+  "17": {
+    "sign": "bed",
+    "yt_embedId": "RnbIsdsBc5Y",
+    "asl_vidref": "zm8ge9hu7h"
+  },
+  "18": {
+    "sign": "bedroom",
+    "yt_embedId": "83WlTF0pTAE",
+    "asl_vidref": "luyjc8a0ac"
+  },
+  "19": {
+    "sign": "bee",
+    "yt_embedId": "S713PTJEjV0",
+    "asl_vidref": "fnqu4tlmcj"
+  },
+  "20": {
+    "sign": "before",
+    "yt_embedId": "1dhDpb69eSM",
+    "asl_vidref": "pqyp8yjnub"
+  },
+  "21": {
+    "sign": "beside",
+    "yt_embedId": "alxQJ68dRRw",
+    "asl_vidref": "h5orvnxdgf"
+  },
+  "22": {
+    "sign": "better",
+    "yt_embedId": "ikmUKffwp-I",
+    "asl_vidref": "ayk7bjmjoz"
+  },
+  "23": {
+    "sign": "bird",
+    "yt_embedId": "Bibgy-yjgYE",
+    "asl_vidref": "ltg0kkwz6j"
+  },
+  "24": {
+    "sign": "black",
+    "yt_embedId": "O5_4x8p5t4U",
+    "asl_vidref": "hm3h1tt81c"
+  },
+  "25": {
+    "sign": "blow",
+    "yt_embedId": "",
+    "asl_vidref": "stcutpshvf"
+  },
+  "26": {
+    "sign": "blue",
+    "yt_embedId": "2O8jkekJkiE",
+    "asl_vidref": "sdsx991jvq"
+  },
+  "27": {
+    "sign": "boat",
+    "yt_embedId": "aDt-KNA-v04",
+    "asl_vidref": "zf3wk0skhz"
+  },
+  "28": {
+    "sign": "book",
+    "yt_embedId": "XjWSfh50kAU",
+    "asl_vidref": "qv0yf0tpbb"
+  },
+  "29": {
+    "sign": "boy",
+    "yt_embedId": "E-wBrs3PJhU",
+    "asl_vidref": "h8cvwsdrxd"
+  },
+  "30": {
+    "sign": "brother",
+    "yt_embedId": "G0fzmn3pQng",
+    "asl_vidref": "vozjp64uc6"
+  },
+  "31": {
+    "sign": "brown",
+    "yt_embedId": "PrniQgULERg",
+    "asl_vidref": "s8pemxvq4k"
+  },
+  "32": {
+    "sign": "bug",
+    "yt_embedId": "Xg866nAu38A",
+    "asl_vidref": "xqy7taon21"
+  },
+  "33": {
+    "sign": "bye",
+    "yt_embedId": "4e14uNAn2Ao",
+    "asl_vidref": "uczqgk2rsc"
+  },
+  "34": {
+    "sign": "callonphone",
+    "yt_embedId": "xQCWPv-PrVM"
+  },
+  "35": {
+    "sign": "can",
+    "yt_embedId": "_0-tGmDsFVc",
+    "asl_vidref": "saropawjok"
+  },
+  "36": {
+    "sign": "car",
+    "yt_embedId": "-NTyYtAyUPI",
+    "asl_vidref": "hbxp1trpej"
+  },
+  "37": {
+    "sign": "carrot",
+    "yt_embedId": "wMX84DjGfwM",
+    "asl_vidref": "x30cb9iy1z"
+  },
+  "38": {
+    "sign": "cat",
+    "yt_embedId": "a3b8LAX68Ho",
+    "asl_vidref": "6o6gre9tkx"
+  },
+  "39": {
+    "sign": "cereal",
+    "yt_embedId": "lJnD0x8w-Ww",
+    "asl_vidref": "buswwsmdfd"
+  },
+  "40": {
+    "sign": "chair",
+    "yt_embedId": "9THlDKVfQJM",
+    "asl_vidref": "6g5z9zwxoo"
+  },
+  "41": {
+    "sign": "cheek",
+    "yt_embedId": "",
+    "asl_vidref": "f0rxowpb9r"
+  },
+  "42": {
+    "sign": "child",
+    "yt_embedId": "32hgy9NSs7k",
+    "asl_vidref": "68ahnlgr3h"
+  },
+  "43": {
+    "sign": "chin",
+    "yt_embedId": "",
+    "asl_vidref": "a76nev6l2f"
+  },
+  "44": {
+    "sign": "chocolate",
+    "yt_embedId": "RCC4R2zpXuI",
+    "asl_vidref": "dhbafgmg0c"
+  },
+  "45": {
+    "sign": "clean",
+    "yt_embedId": "2PeTh4Ym048",
+    "asl_vidref": "oyjugwzse7"
+  },
+  "46": {
+    "sign": "close",
+    "yt_embedId": "UMH1_aRRjy0",
+    "asl_vidref": "xl7oxzcmyq"
+  },
+  "47": {
+    "sign": "closet",
+    "yt_embedId": "psUQ9xmXBbM",
+    "asl_vidref": "wlcsnfcoyu"
+  },
+  "48": {
+    "sign": "cloud",
+    "yt_embedId": "FT17b-fyP4o",
+    "asl_vidref": "lpvyjok2hh"
+  },
+  "49": {
+    "sign": "clown",
+    "yt_embedId": "dGlt9EK8tzQ",
+    "asl_vidref": "5cbcxal7jz"
+  },
+  "50": {
+    "sign": "cow",
+    "yt_embedId": "I2_nB2cXP58",
+    "asl_vidref": "tn5ihiz6vd"
+  },
+  "51": {
+    "sign": "cowboy",
+    "yt_embedId": "",
+    "asl_vidref": "05tcw2nou9"
+  },
+  "52": {
+    "sign": "cry",
+    "yt_embedId": "H6CQg4zRmlA",
+    "asl_vidref": "smtmbn1akp"
+  },
+  "53": {
+    "sign": "cut",
+    "yt_embedId": "C_n0oiY9iQQ",
+    "asl_vidref": "y4dlino7ee"
+  },
+  "54": {
+    "sign": "cute",
+    "yt_embedId": "Swd3dXctl9E",
+    "asl_vidref": "ac74usasil"
+  },
+  "55": {
+    "sign": "dad",
+    "yt_embedId": "1Vllc4F5ic0",
+    "asl_vidref": "9ajglehqxj"
+  },
+  "56": {
+    "sign": "dance",
+    "yt_embedId": "p3UKhedGeTA",
+    "asl_vidref": "f6az5eoa6c"
+  },
+  "57": {
+    "sign": "dirty",
+    "yt_embedId": "K3BygEHQ-Ps",
+    "asl_vidref": "peduxdmsjy"
+  },
+  "58": {
+    "sign": "dog",
+    "yt_embedId": "IbpJtH_QssM",
+    "asl_vidref": "ufanv5xzoy"
+  },
+  "59": {
+    "sign": "doll",
+    "yt_embedId": "pmtb5ajCJQ",
+    "asl_vidref": "iffez3oggi"
+  },
+  "60": {
+    "sign": "donkey",
+    "yt_embedId": "NYjk6-dXb40",
+    "asl_vidref": "tecspqwmsb"
+  },
+  "61": {
+    "sign": "down",
+    "yt_embedId": "LXX6C7erUls",
+    "asl_vidref": "p3w9zzlgx3"
+  },
+  "62": {
+    "sign": "drawer",
+    "yt_embedId": "5wrl6AtW4oc",
+    "asl_vidref": "ldinwkvlzs"
+  },
+  "63": {
+    "sign": "drink",
+    "yt_embedId": "LqJM7wcUixQ",
+    "asl_vidref": "0neg7kjsd0"
+  },
+  "64": {
+    "sign": "drop",
+    "yt_embedId": "Ui097a43wo8",
+    "asl_vidref": "ektdcxeqis"
+  },
+  "65": {
+    "sign": "dry",
+    "yt_embedId": "NuXm0_3x6n8",
+    "asl_vidref": "fwrt9egtm4"
+  },
+  "66": {
+    "sign": "dryer",
+    "yt_embedId": "J7FCsSQbWt0",
+    "asl_vidref": "obif4vllva"
+  },
+  "67": {
+    "sign": "duck",
+    "yt_embedId": "tyr9kyLfZyE",
+    "asl_vidref": "osorfz0cxn"
+  },
+  "68": {
+    "sign": "ear",
+    "yt_embedId": "Eqq_OZk1Eh4",
+    "asl_vidref": "aosrfqatgu"
+  },
+  "69": {
+    "sign": "elephant",
+    "yt_embedId": "0EYc8pG0F8s",
+    "asl_vidref": "tikynbqwq4"
+  },
+  "70": {
+    "sign": "empty",
+    "yt_embedId": "",
+    "asl_vidref": "3vqtmhjpev"
+  },
+  "71": {
+    "sign": "every",
+    "yt_embedId": "t6eJ-SjoeAs",
+    "asl_vidref": "1oipnf8oni"
+  },
+  "72": {
+    "sign": "eye",
+    "yt_embedId": "wxbfGv77xxc",
+    "asl_vidref": "t4lrb9npyv"
+  },
+  "73": {
+    "sign": "face",
+    "yt_embedId": "vToOzx3lsVQ",
+    "asl_vidref": "bxt0s7o17z"
+  },
+  "74": {
+    "sign": "fall",
+    "yt_embedId": "",
+    "asl_vidref": "1s7jwhrg34"
+  },
+  "75": {
+    "sign": "farm",
+    "yt_embedId": "smPpqc0kwFE",
+    "asl_vidref": "6r0ujokszg"
+  },
+  "76": {
+    "sign": "fast",
+    "yt_embedId": "pBzgV-u6WS8s",
+    "asl_vidref": "y7t4qiirv3"
+  },
+  "77": {
+    "sign": "feet",
+    "yt_embedId": "",
+    "asl_vidref": "1qwbap13eo"
+  },
+  "78": {
+    "sign": "find",
+    "yt_embedId": "2O5wVw-rlIs"
+  },
+  "79": {
+    "sign": "fine",
+    "yt_embedId": "YSTnrscx1UY",
+    "asl_vidref": "fyqhkaikdn"
+  },
+  "80": {
+    "sign": "finger",
+    "yt_embedId": "",
+    "asl_vidref": "tbdq7eonxj"
+  },
+  "81": {
+    "sign": "finish",
+    "yt_embedId": "oc4dw7ruW0E",
+    "asl_vidref": "3lmtxqhcpb"
+  },
+  "82": {
+    "sign": "fireman",
+    "yt_embedId": "Mxmxdu1SpZM",
+    "asl_vidref": "qh2gzboubc"
+  },
+  "83": {
+    "sign": "first",
+    "yt_embedId": "tZ04_s30aXY",
+    "asl_vidref": "oz34ajir5d"
+  },
+  "84": {
+    "sign": "fish",
+    "yt_embedId": "IJyUcYJMpmU",
+    "asl_vidref": "yqz94kqld2"
+  },
+  "85": {
+    "sign": "flag",
+    "yt_embedId": "3weRyM3RjHY",
+    "asl_vidref": "871n7vnw4i"
+  },
+  "86": {
+    "sign": "flower",
+    "yt_embedId": "33DHyOmJN1Y",
+    "asl_vidref": "ynghev06mh"
+  },
+  "87": {
+    "sign": "food",
+    "yt_embedId": "2Dl1Q4vlQKs",
+    "asl_vidref": "v4qqezbbp1"
+  },
+  "88": {
+    "sign": "for",
+    "yt_embedId": "xAhjtGNnQVk",
+    "asl_vidref": "klxjw1tsew"
+  },
+  "89": {
+    "sign": "frenchfries",
+    "yt_embedId": "ggo7f9YBkwY",
+    "asl_vidref": "jpxwssjwff"
+  },
+  "90": {
+    "sign": "frog",
+    "yt_embedId": "WKUEbjcYZdg",
+    "asl_vidref": "tfqwwj6qij"
+  },
+  "91": {
+    "sign": "garbage",
+    "yt_embedId": "sHFqJ68Ev8o",
+    "asl_vidref": "tibr1x0jxj"
+  },
+  "92": {
+    "sign": "gift",
+    "yt_embedId": "",
+    "asl_vidref": "gvpv8tujmm"
+  },
+  "93": {
+    "sign": "giraffe",
+    "yt_embedId": "EfB-Nk1GjDQ",
+    "asl_vidref": "rqoze3jczy"
+  },
+  "94": {
+    "sign": "girl",
+    "yt_embedId": "pwh3cOdoiG4",
+    "asl_vidref": "b39v31gmid"
+  },
+  "95": {
+    "sign": "give",
+    "yt_embedId": "U5p42-d-buw",
+    "asl_vidref": "ridneapkv5"
+  },
+  "96": {
+    "sign": "glasswindow",
+    "yt_embedId": "nd7QatseVtg"
+  },
+  "97": {
+    "sign": "go",
+    "yt_embedId": "neq1jYWQ-qg",
+    "asl_vidref": "gqcgnwkkac"
+  },
+  "98": {
+    "sign": "goose",
+    "yt_embedId": "lfp6r5kep5Y",
+    "asl_vidref": "hjchwdfgsf"
+  },
+  "99": {
+    "sign": "grandma",
+    "yt_embedId": "r8yvyGMnrYk",
+    "asl_vidref": "ojgrl0brak"
+  },
+  "100": {
+    "sign": "grandpa",
+    "yt_embedId": "D8OW3lFL_54",
+    "asl_vidref": "katzld4bm3"
+  },
+  "101": {
+    "sign": "grass",
+    "yt_embedId": "o-GOlFqc_aw",
+    "asl_vidref": "ymeh4h13e9"
+  },
+  "102": {
+    "sign": "green",
+    "yt_embedId": "WrkXE5l6udM",
+    "asl_vidref": "vhkzds9he0"
+  },
+  "103": {
+    "sign": "gum",
+    "yt_embedId": "Sr0GhJ-W4h8",
+    "asl_vidref": "g3qgrylwjr"
+  },
+  "104": {
+    "sign": "hair",
+    "yt_embedId": "qa-1mVRY_HE",
+    "asl_vidref": "8tyzt5jve8"
+  },
+  "105": {
+    "sign": "happy",
+    "yt_embedId": "ZXHHO_DY6_A",
+    "asl_vidref": "6dwrq9mh7v"
+  },
+  "106": {
+    "sign": "hat",
+    "yt_embedId": "bul0cjvDEEE",
+    "asl_vidref": "bfg9hgdwq0"
+  },
+  "107": {
+    "sign": "hate",
+    "yt_embedId": "S5Xkm-qaEQI",
+    "asl_vidref": "sq2vtmwvr0"
+  },
+  "108": {
+    "sign": "have",
+    "yt_embedId": "MeNcohEBMHU",
+    "asl_vidref": "vlu4ibcv60"
+  },
+  "109": {
+    "sign": "haveto",
+    "yt_embedId": ""
+  },
+  "110": {
+    "sign": "head",
+    "yt_embedId": "oUS2cVwUU3E",
+    "asl_vidref": "prrtwjs3ye"
+  },
+  "111": {
+    "sign": "hear",
+    "yt_embedId": "U0ECXQ5XKYI",
+    "asl_vidref": "gabmttxbyv"
+  },
+  "112": {
+    "sign": "helicopter",
+    "yt_embedId": "hdiSoTueeN0",
+    "asl_vidref": "msxpjifgix"
+  },
+  "113": {
+    "sign": "hello",
+    "yt_embedId": "FVjpLa8GqeM",
+    "asl_vidref": "ns3nvo9mpj"
+  },
+  "114": {
+    "sign": "hen",
+    "yt_embedId": "64ZHATvgx8s"
+  },
+  "115": {
+    "sign": "hesheit",
+    "yt_embedId": "4qb_PAXa60w"
+  },
+  "116": {
+    "sign": "hide",
+    "yt_embedId": "yZ8Uwt2-21o",
+    "asl_vidref": "nl1ws2nlpj"
+  },
+  "117": {
+    "sign": "high",
+    "yt_embedId": "GwOuxP6lSuE",
+    "asl_vidref": "jcudlg8qqa"
+  },
+  "118": {
+    "sign": "home",
+    "yt_embedId": "WSHD1XX7kWk",
+    "asl_vidref": "iu2mcexkvx"
+  },
+  "119": {
+    "sign": "horse",
+    "yt_embedId": "xCJGQseQ3Fw",
+    "asl_vidref": "oossjmwshy"
+  },
+  "120": {
+    "sign": "hot",
+    "yt_embedId": "a0robonALIk",
+    "asl_vidref": "5scmnmcxat"
+  },
+  "121": {
+    "sign": "hungry",
+    "yt_embedId": "8ZOUoDZkAoQ",
+    "asl_vidref": "pfdwt7zgdq"
+  },
+  "122": {
+    "sign": "icecream",
+    "yt_embedId": "yIOuC_3ORrc",
+    "asl_vidref": "vfevgltl4k"
+  },
+  "123": {
+    "sign": "if",
+    "yt_embedId": "M8CXHkOskvo",
+    "asl_vidref": "bpwfni0ts3"
+  },
+  "124": {
+    "sign": "into",
+    "yt_embedId": "",
+    "asl_vidref": "nnwroclvau"
+  },
+  "125": {
+    "sign": "jacket",
+    "yt_embedId": "RhHvcp1K0-g",
+    "asl_vidref": "xadvvdpstg"
+  },
+  "126": {
+    "sign": "jeans",
+    "yt_embedId": "MnG-39ns_8c",
+    "asl_vidref": "mqid0ocdtw"
+  },
+  "127": {
+    "sign": "jump",
+    "yt_embedId": "yCL4l8WBMVo",
+    "asl_vidref": "ojsy5u7la6"
+  },
+  "128": {
+    "sign": "kiss",
+    "yt_embedId": "E94WQiNP2Go",
+    "asl_vidref": "kinvijceep"
+  },
+  "129": {
+    "sign": "kitty",
+    "yt_embedId": "",
+    "asl_vidref": "ekmsky6fe9"
+  },
+  "130": {
+    "sign": "lamp",
+    "yt_embedId": "KOKG7jy8Loo",
+    "asl_vidref": "g1y10gibjr"
+  },
+  "131": {
+    "sign": "later",
+    "yt_embedId": "4Md8yfrXzp8",
+    "asl_vidref": "ja570zwkak"
+  },
+  "132": {
+    "sign": "like",
+    "yt_embedId": "8uIg8r1awC4",
+    "asl_vidref": "r1poorqc7c"
+  },
+  "133": {
+    "sign": "lion",
+    "yt_embedId": "",
+    "asl_vidref": "uaobypssdt"
+  },
+  "134": {
+    "sign": "lips",
+    "yt_embedId": "",
+    "asl_vidref": "b9numdf8ml"
+  },
+  "135": {
+    "sign": "listen",
+    "yt_embedId": "7I76cfbglQE",
+    "asl_vidref": "1kmwpcssur"
+  },
+  "136": {
+    "sign": "look",
+    "yt_embedId": "JytzcBQp8d4",
+    "asl_vidref": "p7pep8vbyx"
+  },
+  "137": {
+    "sign": "loud",
+    "yt_embedId": "TxjCTeguvNg",
+    "asl_vidref": "fpvc0kq7br"
+  },
+  "138": {
+    "sign": "mad",
+    "yt_embedId": "-Yqw89wx7TE"
+  },
+  "139": {
+    "sign": "make",
+    "yt_embedId": "",
+    "asl_vidref": "czg4rqwquh"
+  },
+  "140": {
+    "sign": "man",
+    "yt_embedId": "rTUmMfWQ2rw",
+    "asl_vidref": "mq5lfpmeh7"
+  },
+  "141": {
+    "sign": "many",
+    "yt_embedId": "7O2mS0Kz4CA",
+    "asl_vidref": "u6fc4hkg0c"
+  },
+  "142": {
+    "sign": "milk",
+    "yt_embedId": "5yelilk0pD4",
+    "asl_vidref": "q3dgnlswtc"
+  },
+  "143": {
+    "sign": "minemy",
+    "yt_embedId": "AESubfsrzP0",
+    "asl_vidref": "jwtq7ueus3"
+  },
+  "144": {
+    "sign": "mitten",
+    "yt_embedId": "yZ6p_bpEt1Y",
+    "asl_vidref": "cwyxguw78u"
+  },
+  "145": {
+    "sign": "mom",
+    "yt_embedId": "DHl2-NT3mIM",
+    "asl_vidref": "yqbm4n8fzl"
+  },
+  "146": {
+    "sign": "moon",
+    "yt_embedId": "vtl8Wc8XCbk",
+    "asl_vidref": "cvycylf6iv"
+  },
+  "147": {
+    "sign": "morning",
+    "yt_embedId": "iH8N44QMh7c",
+    "asl_vidref": "ehvhnapukm"
+  },
+  "148": {
+    "sign": "mouse",
+    "yt_embedId": "aRqX-cSTGAs",
+    "asl_vidref": "oof3mn06tq"
+  },
+  "149": {
+    "sign": "mouth",
+    "yt_embedId": "OtK8Jv4U1CE",
+    "asl_vidref": "138hh4mydz"
+  },
+  "150": {
+    "sign": "nap",
+    "yt_embedId": "",
+    "asl_vidref": "0nhjtnfny0"
+  },
+  "151": {
+    "sign": "napkin",
+    "yt_embedId": "syo02EBG62A",
+    "asl_vidref": "jtupsz27s9"
+  },
+  "152": {
+    "sign": "night",
+    "yt_embedId": "jNiRlzvjd5U",
+    "asl_vidref": "qmzno9oxrd"
+  },
+  "153": {
+    "sign": "no",
+    "yt_embedId": "QJXKaOSyl4o",
+    "asl_vidref": "bxuwdvjaui"
+  },
+  "154": {
+    "sign": "noisy",
+    "yt_embedId": "yAtOFiUQ13M"
+  },
+  "155": {
+    "sign": "nose",
+    "yt_embedId": "2FpYi18-FiU",
+    "asl_vidref": "off5jgk5zq"
+  },
+  "156": {
+    "sign": "not",
+    "yt_embedId": "pUn7pNE5HEE",
+    "asl_vidref": "hzfkacxj4v"
+  },
+  "157": {
+    "sign": "now",
+    "yt_embedId": "OdOx4qaYlKI",
+    "asl_vidref": "hrsjgtrmuw"
+  },
+  "158": {
+    "sign": "nuts",
+    "yt_embedId": "vibnl8hF3dc",
+    "asl_vidref": "lo3pf34lnm"
+  },
+  "159": {
+    "sign": "old",
+    "yt_embedId": "wmJfQSUsnQ8",
+    "asl_vidref": "xjiu3e1bag"
+  },
+  "160": {
+    "sign": "on",
+    "yt_embedId": "e8hiRj3xDiw"
+  },
+  "161": {
+    "sign": "open",
+    "yt_embedId": "LEWPXaskrJk"
+  },
+  "162": {
+    "sign": "orange",
+    "yt_embedId": "3VAeP_x9tFg"
+  },
+  "163": {
+    "sign": "outside",
+    "yt_embedId": "Usx2lHs8rM8"
+  },
+  "164": {
+    "sign": "owie",
+    "yt_embedId": ""
+  },
+  "165": {
+    "sign": "owl",
+    "yt_embedId": "uNMrZeLfl6M"
+  },
+  "166": {
+    "sign": "pajamas",
+    "yt_embedId": ""
+  },
+  "167": {
+    "sign": "pen",
+    "yt_embedId": "0t0nPPnXHjc"
+  },
+  "168": {
+    "sign": "pencil",
+    "yt_embedId": "LjktDSbRaVM"
+  },
+  "169": {
+    "sign": "penny",
+    "yt_embedId": "erCXJxrNtT4"
+  },
+  "170": {
+    "sign": "person",
+    "yt_embedId": "RXX7T4-saPs"
+  },
+  "171": {
+    "sign": "pig",
+    "yt_embedId": ""
+  },
+  "172": {
+    "sign": "pizza",
+    "yt_embedId": "XIZ2DrdEU3k"
+  },
+  "173": {
+    "sign": "please",
+    "yt_embedId": "rnb9FxPO7is"
+  },
+  "174": {
+    "sign": "police",
+    "yt_embedId": "aPcjl3P94xc"
+  },
+  "175": {
+    "sign": "pool",
+    "yt_embedId": "ioPNJSwE2_U"
+  },
+  "176": {
+    "sign": "potty",
+    "yt_embedId": ""
+  },
+  "177": {
+    "sign": "pretend",
+    "yt_embedId": "lheTIKA6WXs"
+  },
+  "178": {
+    "sign": "pretty",
+    "yt_embedId": "FFk0f2q0X0"
+  },
+  "179": {
+    "sign": "puppy",
+    "yt_embedId": ""
+  },
+  "180": {
+    "sign": "puzzle",
+    "yt_embedId": ""
+  },
+  "181": {
+    "sign": "quiet",
+    "yt_embedId": "xq2ZodH6gzk"
+  },
+  "182": {
+    "sign": "radio",
+    "yt_embedId": "TU-VgMd_Yco"
+  },
+  "183": {
+    "sign": "rain",
+    "yt_embedId": "Bk4w3wvvehE"
+  },
+  "184": {
+    "sign": "read",
+    "yt_embedId": "Ae98aQIiVZo"
+  },
+  "185": {
+    "sign": "red",
+    "yt_embedId": "pyW0OYYrZ7U"
+  },
+  "186": {
+    "sign": "refrigerator",
+    "yt_embedId": "LOW8ZIaAJ-c"
+  },
+  "187": {
+    "sign": "ride",
+    "yt_embedId": "kg8MJwFhiiw"
+  },
+  "188": {
+    "sign": "room",
+    "yt_embedId": "ByET2PW3OrQ"
+  },
+  "189": {
+    "sign": "sad",
+    "yt_embedId": "zfkQYQhrZ6Q"
+  },
+  "190": {
+    "sign": "same",
+    "yt_embedId": "cnX45VWbjmc"
+  },
+  "191": {
+    "sign": "say",
+    "yt_embedId": "fka6bGd2TX8"
+  },
+  "192": {
+    "sign": "scissors",
+    "yt_embedId": "NntEm9lv8jw"
+  },
+  "193": {
+    "sign": "see",
+    "yt_embedId": "7XQiv-PxecU"
+  },
+  "194": {
+    "sign": "shhh",
+    "yt_embedId": "rmG9ri2h6Co"
+  },
+  "195": {
+    "sign": "shirt",
+    "yt_embedId": "9Rcg3QJiClc"
+  },
+  "196": {
+    "sign": "shoe",
+    "yt_embedId": "M1B5TMhbA24"
+  },
+  "197": {
+    "sign": "shower",
+    "yt_embedId": "P7on9Ymhnu4"
+  },
+  "198": {
+    "sign": "sick",
+    "yt_embedId": "IpwtXzIS1Z0"
+  },
+  "199": {
+    "sign": "sleep",
+    "yt_embedId": "dXEqaWSEztY"
+  },
+  "200": {
+    "sign": "sleepy",
+    "yt_embedId": "2LCp_ZNTwDA"
+  },
+  "201": {
+    "sign": "smile",
+    "yt_embedId": ""
+  },
+  "202": {
+    "sign": "snack",
+    "yt_embedId": "nX3l9Z_rOdg"
+  },
+  "203": {
+    "sign": "snow",
+    "yt_embedId": "_v3yE7y6Gpo"
+  },
+  "204": {
+    "sign": "stairs",
+    "yt_embedId": "7pas_QWHTJg"
+  },
+  "205": {
+    "sign": "stay",
+    "yt_embedId": "QmbOr-8K_Kw"
+  },
+  "206": {
+    "sign": "sticky",
+    "yt_embedId": "ccpGjd38TAA"
+  },
+  "207": {
+    "sign": "store",
+    "yt_embedId": "CPp1UOM-olA"
+  },
+  "208": {
+    "sign": "story",
+    "yt_embedId": "TqmlL13jZoI"
+  },
+  "209": {
+    "sign": "stuck",
+    "yt_embedId": "XqpsPBnD-Qg"
+  },
+  "210": {
+    "sign": "sun",
+    "yt_embedId": "AjJTLUhIHww"
+  },
+  "211": {
+    "sign": "table",
+    "yt_embedId": "mEgQI-DHntY"
+  },
+  "212": {
+    "sign": "talk",
+    "yt_embedId": "vB3APsM4FFQ"
+  },
+  "213": {
+    "sign": "taste",
+    "yt_embedId": "4dQHo4Q2wGA"
+  },
+  "214": {
+    "sign": "thankyou",
+    "yt_embedId": "2W0BDFUjsG0"
+  },
+  "215": {
+    "sign": "that",
+    "yt_embedId": "tNas8PN6pIQ"
+  },
+  "216": {
+    "sign": "there",
+    "yt_embedId": "m_gGp8-542c"
+  },
+  "217": {
+    "sign": "think",
+    "yt_embedId": "NdTKb3Kig88"
+  },
+  "218": {
+    "sign": "thirsty",
+    "yt_embedId": ""
+  },
+  "219": {
+    "sign": "tiger",
+    "yt_embedId": ""
+  },
+  "220": {
+    "sign": "time",
+    "yt_embedId": "ANRCVPkuN8Y"
+  },
+  "221": {
+    "sign": "tomorrow",
+    "yt_embedId": "6gFOZMDptIk"
+  },
+  "222": {
+    "sign": "tongue",
+    "yt_embedId": ""
+  },
+  "223": {
+    "sign": "tooth",
+    "yt_embedId": ""
+  },
+  "224": {
+    "sign": "toothbrush",
+    "yt_embedId": ""
+  },
+  "225": {
+    "sign": "touch",
+    "yt_embedId": "ZF9qBf02iE0"
+  },
+  "226": {
+    "sign": "toy",
+    "yt_embedId": ""
+  },
+  "227": {
+    "sign": "tree",
+    "yt_embedId": "DMdPpkiUJso"
+  },
+  "228": {
+    "sign": "uncle",
+    "yt_embedId": "PqtMCA2lu9w"
+  },
+  "229": {
+    "sign": "underwear",
+    "yt_embedId": "yKAFC9iyxas"
+  },
+  "230": {
+    "sign": "up",
+    "yt_embedId": ""
+  },
+  "231": {
+    "sign": "vacuum",
+    "yt_embedId": "YvYI4AftJPo"
+  },
+  "232": {
+    "sign": "wait",
+    "yt_embedId": "YfwgS9ZsBVw"
+  },
+  "233": {
+    "sign": "wake",
+    "yt_embedId": "0n0eQSCS3Ow"
+  },
+  "234": {
+    "sign": "water",
+    "yt_embedId": "e7_zscB_EVw"
+  },
+  "235": {
+    "sign": "wet",
+    "yt_embedId": "5Ns7zdDWcbg"
+  },
+  "236": {
+    "sign": "weus",
+    "yt_embedId": "2qRV959WnY0"
+  },
+  "237": {
+    "sign": "where",
+    "yt_embedId": "HS0SXS-GHYY"
+  },
+  "238": {
+    "sign": "white",
+    "yt_embedId": "uLjkLwFvFtw"
+  },
+  "239": {
+    "sign": "who",
+    "yt_embedId": "wKl26BsEAoc"
+  },
+  "240": {
+    "sign": "why",
+    "yt_embedId": "K0yp2v6Atxs"
+  },
+  "241": {
+    "sign": "will",
+    "yt_embedId": "6YSr9tEaaTU"
+  },
+  "242": {
+    "sign": "wolf",
+    "yt_embedId": "7xb2OOZUo3s"
+  },
+  "243": {
+    "sign": "yellow",
+    "yt_embedId": "GY90AmJYl0E"
+  },
+  "244": {
+    "sign": "yes",
+    "yt_embedId": "0usayvOXzHo"
+  },
+  "245": {
+    "sign": "yesterday",
+    "yt_embedId": "BrSb83b9kbY"
+  },
+  "246": {
+    "sign": "yourself",
+    "yt_embedId": "NF_jrhLKWlY"
+  },
+  "247": {
+    "sign": "yucky",
+    "yt_embedId": "-RRi4uqRFaY"
+  },
+  "248": {
+    "sign": "zebra",
+    "yt_embedId": ""
+  },
+  "249": {
+    "sign": "zipper",
+    "yt_embedId": "m9fxgSPo0s0"
+  }
 }

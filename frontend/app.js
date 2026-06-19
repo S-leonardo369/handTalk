@@ -1,22 +1,28 @@
 /**
- * ASL Translator — app.js (Holistic landmark version)
- * Uses MediaPipe Holistic to extract 543 landmarks (face + hands + pose)
- * and sends them to the FastAPI backend which runs the hoyso48 TFLite model.
- *
- * Pipeline:
- *   Camera → Holistic (543 landmarks) → WebSocket → TFLite → Sign prediction
+ * ASL Translator — app.js
+ * Camera → MediaPipe Holistic (543 landmarks) → WebSocket → TFLite → Sign prediction
  */
 
-// ── MediaPipe Holistic (CDN — works without local files) ──────────────────────
-// We load Holistic from CDN since it is a different model than HandLandmarker
+// ── CDN urls ──────────────────────────────────────────────────────────────────
 const HOLISTIC_SCRIPT = "https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5.1675471629/holistic.js";
 const HOLISTIC_UTILS  = "https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862/camera_utils.js";
 const DRAWING_UTILS   = "https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1675466124/drawing_utils.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const CLIENT_ID        = Math.random().toString(36).slice(2);
-const CONTROLS_TIMEOUT = 3000;
-const SEND_EVERY_N     = 15; // send accumulated frames every N frames (~0.5s at 30fps)
+const CLIENT_ID         = Math.random().toString(36).slice(2);
+const CONTROLS_TIMEOUT  = 3000;
+const SEND_EVERY_N      = 15;      // trigger predict every N frames (~0.5s at 30fps)
+const WS_RECONNECT_BASE = 1000;
+const WS_RECONNECT_MAX  = 16000;
+
+/** Pre-serialized string — avoids JSON.stringify on every predict trigger */
+const PREDICT_MSG = '{"action":"predict"}';
+
+/** Reuse frozen style objects — MediaPipe drawing never allocates per frame */
+const DRAW_CONN = Object.freeze({ color: 'rgba(41,196,154,.35)', lineWidth: 1.5 });
+const DRAW_LM   = Object.freeze({ color: 'rgba(41,196,154,.8)',  lineWidth: 1, radius: 3 });
+
+const CONFETTI_COLORS = ['#29c49a', '#4dd9b4', '#1a9e7c', '#a8f0dc', '#e8e8ec'];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -26,6 +32,11 @@ function getApiBase() {
 }
 function getWsBase() {
   return getApiBase().replace(/^https/, 'wss').replace(/^http/, 'ws');
+}
+
+/** Safe send — only fires when socket is OPEN */
+function wsSend(payload) {
+  if (ws?.readyState === WebSocket.OPEN) ws.send(payload);
 }
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
@@ -60,27 +71,33 @@ const pauseThresh      = $('pauseThresh');
 const pauseThreshVal   = $('pauseThreshVal');
 const toastEl          = $('toast');
 const celebCanvas      = $('celebrationCanvas');
+const gateLabel        = $('gateLabel');      // optional: gate reason
+const marginLabel      = $('marginLabel');    // optional: margin value
+const top5Panel        = $('top5Panel');      // optional: top-5 panel
+const suggestionsBar   = $('suggestionsBar'); // optional: autocomplete
 
-let celebCtx          = null;
-let ws                = null;
-let holistic          = null;
-let holisticCamera    = null;
-let isRunning         = false;
-let lastSentence      = '';
-let sentenceTotal     = 0;
-let handVisible       = false;
-let lastSignText      = '';
-let lastChipSigns     = [];
-let controlsHideTimer = null;
-let frameCount        = 0;
+let celebCtx         = null;
+let ws               = null;
+let holistic         = null;
+let holisticCamera   = null;
+let isRunning        = false;
+let lastSentence     = '';
+let sentenceTotal    = 0;
+let handVisible      = false;
+let lastSignText     = '';
+let lastChipSigns    = [];
+let controlsTimer    = null;
+let frameCount       = 0;
+let lastVideoW       = 0;
+let lastVideoH       = 0;
+let wsReconnectDelay = WS_RECONNECT_BASE;
+let hudConfThresh    = 0.5; // cached from slider — avoids DOM read per WS message
 
-// ── Load MediaPipe scripts dynamically ────────────────────────────────────────
+// ── Script loader ─────────────────────────────────────────────────────────────
 function loadScript(src) {
   return new Promise((resolve, reject) => {
     const s = document.createElement('script');
-    s.src = src;
-    s.onload = resolve;
-    s.onerror = reject;
+    s.src = src; s.onload = resolve; s.onerror = reject;
     document.head.appendChild(s);
   });
 }
@@ -88,6 +105,7 @@ function loadScript(src) {
 // ── Toast ─────────────────────────────────────────────────────────────────────
 let toastTimer;
 function toast(msg, ms = 2600) {
+  if (!toastEl) return;
   toastEl.textContent = msg;
   toastEl.classList.add('show');
   clearTimeout(toastTimer);
@@ -100,7 +118,7 @@ function addRipple(btn, e) {
   const size = Math.max(rect.width, rect.height);
   const r    = document.createElement('span');
   r.className = 'ripple';
-  r.style.cssText = `width:${size}px;height:${size}px;left:${(e.clientX-rect.left)-size/2}px;top:${(e.clientY-rect.top)-size/2}px`;
+  r.style.cssText = `width:${size}px;height:${size}px;left:${(e.clientX - rect.left) - size/2}px;top:${(e.clientY - rect.top) - size/2}px`;
   btn.appendChild(r);
   r.addEventListener('animationend', () => r.remove(), { once: true });
 }
@@ -110,8 +128,8 @@ btnStart?.addEventListener('click', e => addRipple(btnStart, e));
 function showControls() {
   controls?.classList.remove('hidden');
   topBar?.classList.remove('hidden');
-  clearTimeout(controlsHideTimer);
-  controlsHideTimer = setTimeout(() => {
+  clearTimeout(controlsTimer);
+  controlsTimer = setTimeout(() => {
     controls?.classList.add('hidden');
     topBar?.classList.add('hidden');
   }, CONTROLS_TIMEOUT);
@@ -124,7 +142,7 @@ document.addEventListener('pointerdown', (e) => {
 
 // ── Status ────────────────────────────────────────────────────────────────────
 function setStatus(state, text) {
-  const cls = `sdot${state ? ' '+state : ''}`;
+  const cls = `sdot${state ? ' ' + state : ''}`;
   if (statusDot) statusDot.className = cls;
   if (topDot)    topDot.className    = cls;
   if (statusText) statusText.textContent = text;
@@ -139,11 +157,12 @@ async function checkBackend() {
     const d = await r.json();
     if (d.model_loaded) {
       setStatus('ok', `${d.num_signs} signs`);
-      const info = `✓ ${d.num_signs} signs loaded\nModel: ${d.model || 'hoyso48'}\n${d.signs.slice(0,10).join(', ')}…`;
-      if (modelInfo) modelInfo.textContent = info;
+      const signs = Array.isArray(d.signs) ? d.signs : [];
+      if (modelInfo) modelInfo.textContent =
+        `✓ ${d.num_signs} signs loaded\nModel: ${d.model || 'hoyso48'}\n${signs.slice(0, 10).join(', ')}…`;
     } else {
       setStatus('warn', 'No model');
-      if (modelInfo) modelInfo.textContent = '⚠ No model\nCopy model files to backend/model/';
+      if (modelInfo) modelInfo.textContent = `⚠ No model\n${d.error || 'Copy model files to backend/model/'}`;
       toast('⚠ No model found', 5000);
     }
   } catch {
@@ -155,101 +174,159 @@ async function checkBackend() {
 
 // ── WebSocket ─────────────────────────────────────────────────────────────────
 function connectWS() {
-  if (ws && ws.readyState <= 1) return;
+  if (ws && ws.readyState <= WebSocket.OPEN) return;
+
   ws = new WebSocket(`${getWsBase()}/ws/${CLIENT_ID}`);
+
+  ws.onopen = () => {
+    setStatus('ok', 'Live');
+    wsReconnectDelay = WS_RECONNECT_BASE;
+    // Sync confidence slider to backend on reconnect
+    wsSend(JSON.stringify({ action: 'set_threshold', confidence: hudConfThresh }));
+  };
+
   ws.onmessage = (e) => {
-    const msg = JSON.parse(e.data);
+    let msg;
+    try { msg = JSON.parse(e.data); }
+    catch { console.warn('[WS] Bad JSON:', e.data); return; }
+
     if (msg.type === 'prediction') {
       updateHUD(msg.sign, msg.confidence);
       updateChips(msg.buffer || []);
+      updateDiagHUD(msg);
     }
     if (msg.type === 'sentence') {
       addSentence(msg.sentence, msg.gloss);
       updateChips([]);
     }
   };
-  ws.onclose = () => setTimeout(connectWS, 3000);
+
+  ws.onerror = () => setStatus('warn', 'WS error');
+
+  ws.onclose = () => {
+    setStatus('warn', 'Reconnecting…');
+    setTimeout(connectWS, wsReconnectDelay);
+    wsReconnectDelay = Math.min(wsReconnectDelay * 2, WS_RECONNECT_MAX);
+  };
+}
+
+// ── Diagnostic HUD ────────────────────────────────────────────────────────────
+function updateDiagHUD(msg) {
+  if (gateLabel) {
+    gateLabel.textContent = msg.gate ? `⛔ ${msg.gate.replace(/_/g, ' ')}` : '';
+  }
+  if (marginLabel && msg.margin != null) {
+    marginLabel.textContent = `margin: ${(msg.margin * 100).toFixed(1)}%`;
+  }
+  if (top5Panel && Array.isArray(msg.top5) && msg.top5.length) {
+    top5Panel.innerHTML = msg.top5
+      .map(p => `<span class="t5-chip" title="${(p.confidence * 100).toFixed(1)}%">
+        ${p.sign} <em>${(p.confidence * 100).toFixed(0)}%</em></span>`)
+      .join('');
+  }
+  if (suggestionsBar) {
+    if (Array.isArray(msg.suggestions) && msg.suggestions.length) {
+      suggestionsBar.innerHTML = msg.suggestions
+        .map(s => `<button class="sugg-chip" data-sign="${s.sign}">${s.sign}</button>`)
+        .join('');
+      suggestionsBar.querySelectorAll('.sugg-chip').forEach(btn => {
+        btn.addEventListener('click', () => {
+          wsSend(JSON.stringify({ action: 'accept_suggestion', sign: btn.dataset.sign }));
+          toast(`✓ Added: ${btn.dataset.sign}`);
+        }, { once: true });
+      });
+    } else {
+      suggestionsBar.innerHTML = '';
+    }
+  }
 }
 
 // ── MediaPipe Holistic ────────────────────────────────────────────────────────
 async function initHolistic() {
   toast('Loading hand detection…');
-
-  // Load all three MediaPipe scripts
   await loadScript(HOLISTIC_UTILS);
   await loadScript(DRAWING_UTILS);
   await loadScript(HOLISTIC_SCRIPT);
 
   holistic = new window.Holistic({
-    locateFile: (file) =>
-      `https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5.1675471629/${file}`
+    locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic@0.5.1675471629/${f}`
   });
 
   holistic.setOptions({
-    modelComplexity:           1,
-    smoothLandmarks:           true,
-    enableSegmentation:        false,
-    smoothSegmentation:        false,
-    refineFaceLandmarks:       false,
-    minDetectionConfidence:    0.5,
-    minTrackingConfidence:     0.5,
+    modelComplexity:        1,
+    smoothLandmarks:        true,
+    enableSegmentation:     false,
+    smoothSegmentation:     false,
+    refineFaceLandmarks:    false,  // saves GPU, not needed for sign recognition
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence:  0.5,
   });
 
   holistic.onResults(onHolisticResults);
-
   toast('Ready — show your hands ✋');
 }
 
-// ── Draw landmarks on canvas ──────────────────────────────────────────────────
+// ── Pack landmarks ────────────────────────────────────────────────────────────
+/**
+ * FIX: Always include ALL four landmark groups on every frame.
+ *
+ * Previous version omitted faceLandmarks from regular frames to save bandwidth,
+ * but the backend nose-centres every frame using face landmark #1.
+ * Without face, nose = (0,0,0) so no centring happened on 14 out of every 15
+ * frames — producing an inconsistent feature window going into the model.
+ *
+ * Bandwidth cost: face adds ~468 × 3 floats ≈ 11KB/frame at 30fps = ~330KB/s.
+ * This is acceptable on a local WebSocket. If bandwidth becomes a concern,
+ * implement centring in the frontend instead and strip face before sending.
+ */
+function packLandmarks(res) {
+  const o = {};
+  if (res.faceLandmarks)      o.faceLandmarks      = res.faceLandmarks;
+  if (res.poseLandmarks)      o.poseLandmarks      = res.poseLandmarks;
+  if (res.leftHandLandmarks)  o.leftHandLandmarks  = res.leftHandLandmarks;
+  if (res.rightHandLandmarks) o.rightHandLandmarks = res.rightHandLandmarks;
+  return o;
+}
+
+// ── Holistic results handler ──────────────────────────────────────────────────
 function onHolisticResults(results) {
-  if (!canvas || !ctx) return;
+  if (!canvas || !ctx || !video) return;
 
-  // Resize canvas to match video
-  if (canvas.width  !== video.videoWidth)  canvas.width  = video.videoWidth;
-  if (canvas.height !== video.videoHeight) canvas.height = video.videoHeight;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+  if (vw > 0 && vh > 0 && (vw !== lastVideoW || vh !== lastVideoH)) {
+    lastVideoW = vw; lastVideoH = vh;
+    canvas.width = vw; canvas.height = vh;
+  }
+  if (vw <= 0 || vh <= 0) return;
+  ctx.clearRect(0, 0, vw, vh);
 
-  // Detect hand presence for pulse ring
-  const hasHand = !!(results.leftHandLandmarks || results.rightHandLandmarks);
+  const hasHand = (results.leftHandLandmarks?.length > 0)
+               || (results.rightHandLandmarks?.length > 0);
   if (hasHand !== handVisible) {
     handVisible = hasHand;
     handRing?.classList.toggle('active', hasHand);
   }
 
-  // Draw hand connections
   if (results.leftHandLandmarks) {
-    window.drawConnectors(ctx, results.leftHandLandmarks,
-      window.HAND_CONNECTIONS, { color: 'rgba(41,196,154,.35)', lineWidth: 1.5 });
-    window.drawLandmarks(ctx, results.leftHandLandmarks,
-      { color: 'rgba(41,196,154,.8)', lineWidth: 1, radius: 3 });
+    window.drawConnectors(ctx, results.leftHandLandmarks, window.HAND_CONNECTIONS, DRAW_CONN);
+    window.drawLandmarks(ctx,  results.leftHandLandmarks, DRAW_LM);
   }
   if (results.rightHandLandmarks) {
-    window.drawConnectors(ctx, results.rightHandLandmarks,
-      window.HAND_CONNECTIONS, { color: 'rgba(41,196,154,.35)', lineWidth: 1.5 });
-    window.drawLandmarks(ctx, results.rightHandLandmarks,
-      { color: 'rgba(41,196,154,.8)', lineWidth: 1, radius: 3 });
+    window.drawConnectors(ctx, results.rightHandLandmarks, window.HAND_CONNECTIONS, DRAW_CONN);
+    window.drawLandmarks(ctx,  results.rightHandLandmarks, DRAW_LM);
   }
 
-  // Send frame data to backend
-  if (ws?.readyState === 1) {
-    frameCount++;
+  if (ws?.readyState !== WebSocket.OPEN) return;
 
-    // Send each frame as it arrives
-    ws.send(JSON.stringify({
-      action: 'frame',
-      landmarks: {
-        faceLandmarks:      results.faceLandmarks      || null,
-        poseLandmarks:      results.poseLandmarks      || null,
-        leftHandLandmarks:  results.leftHandLandmarks  || null,
-        rightHandLandmarks: results.rightHandLandmarks || null,
-      }
-    }));
+  frameCount++;
 
-    // Every SEND_EVERY_N frames, trigger prediction
-    if (frameCount % SEND_EVERY_N === 0) {
-      ws.send(JSON.stringify({ action: 'predict' }));
-      frameCount = 0;
-    }
+  // Send frame with ALL landmarks (face included) every frame
+  ws.send(JSON.stringify({ action: 'frame', landmarks: packLandmarks(results) }));
+
+  if (frameCount >= SEND_EVERY_N) {
+    ws.send(PREDICT_MSG);
+    frameCount = 0;
   }
 }
 
@@ -259,7 +336,6 @@ async function startCamera() {
   btnStart.querySelector('.btn-label').textContent = 'Starting…';
 
   try {
-    // Load holistic if not already loaded
     if (!holistic) await initHolistic();
 
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -270,25 +346,20 @@ async function startCamera() {
     video.srcObject = stream;
     await video.play();
 
-    // Use MediaPipe Camera utility to feed frames to Holistic
     holisticCamera = new window.Camera(video, {
-      onFrame: async () => {
-        if (holistic) await holistic.send({ image: video });
-      },
-      width:  1280,
-      height: 720,
+      onFrame: async () => { if (holistic) await holistic.send({ image: video }); },
+      width: 1280, height: 720,
     });
     holisticCamera.start();
 
     startScreen?.classList.add('gone');
-    btnFlush && (btnFlush.disabled = false);
+    if (btnFlush) btnFlush.disabled = false;
     isRunning = true;
     connectWS();
     showControls();
 
     btnStart.querySelector('.btn-label').textContent = 'Camera On';
     btnStart.disabled = false;
-
   } catch (err) {
     btnStart.disabled = false;
     btnStart.querySelector('.btn-label').textContent = 'Start Camera';
@@ -298,12 +369,9 @@ async function startCamera() {
 
 // ── HUD ───────────────────────────────────────────────────────────────────────
 function updateHUD(sign, conf) {
-  const thresh  = parseInt(confThresh?.value ?? 50) / 100;
-  const valid   = !!(sign && conf >= thresh);
+  const valid   = !!(sign && conf >= hudConfThresh);
   const newSign = valid && sign !== lastSignText;
-
-  if (newSign)  lastSignText = sign;
-  if (!valid)   lastSignText = '';
+  lastSignText  = valid ? sign : '';
 
   if (signWord) {
     signWord.textContent = valid ? sign : '';
@@ -317,9 +385,9 @@ function updateChips(signs) {
       signs.every((s, i) => s === lastChipSigns[i])) return;
   lastChipSigns = [...signs];
   if (!signs.length) { if (sentenceChips) sentenceChips.innerHTML = ''; return; }
-  if (sentenceChips) sentenceChips.innerHTML = signs.map((s, i) =>
-    `<span class="s-chip${i === signs.length-1 ? ' new' : ''}">${s}</span>`
-  ).join('');
+  if (sentenceChips) sentenceChips.innerHTML = signs
+    .map((s, i) => `<span class="s-chip${i === signs.length - 1 ? ' new' : ''}">${s}</span>`)
+    .join('');
 }
 
 // ── Sentence ──────────────────────────────────────────────────────────────────
@@ -364,21 +432,18 @@ function speak(text) {
 
 // ── Celebration ───────────────────────────────────────────────────────────────
 function celebrate() {
-  if (!celebCtx) {
-    if (!celebCanvas) return;
-    celebCtx = celebCanvas.getContext('2d');
-  }
-  if (celebCanvas.width !== window.innerWidth)   celebCanvas.width  = window.innerWidth;
+  if (!celebCanvas) return;
+  if (!celebCtx) celebCtx = celebCanvas.getContext('2d');
+  if (celebCanvas.width  !== window.innerWidth)  celebCanvas.width  = window.innerWidth;
   if (celebCanvas.height !== window.innerHeight) celebCanvas.height = window.innerHeight;
   celebCanvas.style.display = 'block';
 
-  const colors = ['#29c49a','#4dd9b4','#1a9e7c','#a8f0dc','#e8e8ec'];
   const pieces = Array.from({ length: 60 }, () => ({
-    x: Math.random()*celebCanvas.width, y: -10,
-    vx: (Math.random()-.5)*3.5, vy: Math.random()*4+2,
-    rot: Math.random()*360, vr: (Math.random()-.5)*6,
-    w: Math.random()*6+3, h: Math.random()*3+2,
-    c: colors[Math.floor(Math.random()*colors.length)], a: 1,
+    x: Math.random() * celebCanvas.width, y: -10,
+    vx: (Math.random() - .5) * 3.5, vy: Math.random() * 4 + 2,
+    rot: Math.random() * 360, vr: (Math.random() - .5) * 6,
+    w: Math.random() * 6 + 3, h: Math.random() * 3 + 2,
+    c: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)], a: 1,
   }));
 
   let frame = 0;
@@ -386,15 +451,16 @@ function celebrate() {
     celebCtx.clearRect(0, 0, celebCanvas.width, celebCanvas.height);
     let alive = false;
     for (const p of pieces) {
-      p.x+=p.vx; p.y+=p.vy; p.vy+=.12; p.rot+=p.vr;
+      p.x += p.vx; p.y += p.vy; p.vy += .12; p.rot += p.vr;
       if (frame > 40) p.a -= .025;
       if (p.a > 0) {
         alive = true;
         celebCtx.save();
         celebCtx.globalAlpha = p.a;
-        celebCtx.translate(p.x,p.y); celebCtx.rotate(p.rot*Math.PI/180);
+        celebCtx.translate(p.x, p.y);
+        celebCtx.rotate(p.rot * Math.PI / 180);
         celebCtx.fillStyle = p.c;
-        celebCtx.fillRect(-p.w/2,-p.h/2,p.w,p.h);
+        celebCtx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
         celebCtx.restore();
       }
     }
@@ -420,38 +486,41 @@ function clearAll() {
 
 // ── Flush ─────────────────────────────────────────────────────────────────────
 function flush() {
-  ws?.readyState === 1 && ws.send(JSON.stringify({ action: 'flush' }));
+  wsSend(JSON.stringify({ action: 'flush' }));
   toast('Sentence flushed');
 }
 
 // ── Panels ────────────────────────────────────────────────────────────────────
 btnSettings?.addEventListener('click', () => {
   settingsPanel?.classList.add('open');
-  clearTimeout(controlsHideTimer);
+  clearTimeout(controlsTimer);
 });
 btnSettingsClose?.addEventListener('click', () => {
   settingsPanel?.classList.remove('open');
   showControls();
 });
-settingsPanel?.addEventListener('click', (e) => {
+settingsPanel?.addEventListener('click', e => {
   if (e.target === settingsPanel) settingsPanel.classList.remove('open');
 });
 sentenceText?.addEventListener('click', () => {
   if (sentenceTotal > 0) historyPanel?.classList.add('open');
 });
 btnHistoryClose?.addEventListener('click', () => historyPanel?.classList.remove('open'));
-historyPanel?.addEventListener('click', (e) => {
+historyPanel?.addEventListener('click', e => {
   if (e.target === historyPanel) historyPanel.classList.remove('open');
 });
 
 // ── Sliders ───────────────────────────────────────────────────────────────────
 confThresh?.addEventListener('input', () => {
+  hudConfThresh = parseInt(confThresh.value, 10) / 100;
   if (confThreshVal) confThreshVal.textContent = `${confThresh.value}%`;
+  wsSend(JSON.stringify({ action: 'set_threshold', confidence: hudConfThresh }));
 });
+
 pauseThresh?.addEventListener('input', () => {
-  const val = (parseInt(pauseThresh.value)/10).toFixed(1);
+  const val = (parseInt(pauseThresh.value) / 10).toFixed(1);
   if (pauseThreshVal) pauseThreshVal.textContent = `${val}s`;
-  ws?.readyState === 1 && ws.send(JSON.stringify({ action: 'set_pause', value: parseFloat(val) }));
+  wsSend(JSON.stringify({ action: 'set_pause', value: parseFloat(val) }));
 });
 
 // ── Button wiring ─────────────────────────────────────────────────────────────
@@ -462,6 +531,7 @@ btnSpeak?.addEventListener('click', () => { if (lastSentence) speak(lastSentence
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 if (sentenceText) sentenceText.classList.add('placeholder');
+if (confThresh)   hudConfThresh = parseInt(confThresh.value, 10) / 100;
 checkBackend();
 window.speechSynthesis?.getVoices();
 speechSynthesis.addEventListener?.('voiceschanged', () => speechSynthesis.getVoices());

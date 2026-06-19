@@ -1,0 +1,6 @@
+{
+  "include": ["backend"],
+  "venvPath": ".",
+  "venv": "asl_env",
+  "pythonVersion": "3.11"
+}
